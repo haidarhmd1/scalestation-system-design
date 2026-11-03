@@ -489,3 +489,13 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .clock-lamp-btn { display: inline-flex; padding: 4px; border: 0; background: none; cursor: help; border-radius: 50%; }
 .clock-t[tabindex] { cursor: help; }
 @media (hover: none) { .pop-card { display: none; } .pop:focus-within .pop-card { display: flex; } }
+
+/* ── per-option info icons in segmented controls ── */
+.seg-opt { flex: 1; position: relative; display: flex; }
+.seg-opt > button:not(.info) { flex: 1; padding-right: 22px; }
+.seg .seg-opt > .info { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); flex: none; margin: 0; padding: 0; width: 14px; height: 14px; font-size: 9px; color: #9ccaff; background: #0b1a2a; border: 1px solid #2f5a85; border-radius: 50%; }
+.seg .seg-opt > .info:hover { background: var(--blue); color: #06101c; }
+.adv-fix { display: inline-flex; align-items: center; flex: none; }
+.seg:has(> .seg-opt) { flex-direction: column; flex-wrap: nowrap; }
+.seg:has(> .seg-opt) .seg-opt > button:not(.info) { text-align: left; padding: 6px 28px 6px 10px; }
+.seg .seg-opt > .info { right: 8px; }
