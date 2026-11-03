@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CONFIG, RAM_STEPS, SCENARIOS, VCPU_STEPS, advise, compute, findBreakingPoint, fmt, ms, pct, serverCapacity } from '../sim/model.js';
 import SimMap, { STATUS_COLOR } from './SimMap.jsx';
 import { Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.jsx';
+import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js';
+import { Info } from './Glossary.jsx';
 
 const TICK_MS = 250;
 const SPEEDS = [{ value: 2, label: '1×' }, { value: 10, label: '5×' }, { value: 40, label: '20×' }];
@@ -32,6 +34,35 @@ export default function Simulator({ preset }) {
   const [speed, setSpeed] = useState(2);
   const [selected, setSelected] = useState('app');
   const [bp, setBp] = useState(null);
+  const [fs, setFs] = useState(false);
+  const [fsInsp, setFsInsp] = useState(true);
+
+  // Full screen: the whole page goes full screen (so glossary pop-ups still show)
+  // and the map panel covers the viewport via CSS.
+  const toggleFs = () => {
+    if (!fs) {
+      setFs(true);
+      setFsInsp(true);
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else {
+      setFs(false);
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    }
+  };
+  useEffect(() => {
+    if (!fs) return;
+    const onChange = () => { if (!document.fullscreenElement) setFs(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setFs(false); };
+    document.addEventListener('fullscreenchange', onChange);
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [fs]);
+  const selectStation = (id) => { setSelected(id); setFsInsp(true); };
 
   const cfgRef = useRef(cfg);
   cfgRef.current = cfg;
@@ -43,7 +74,7 @@ export default function Simulator({ preset }) {
   // apply a preset coming from the catalogue
   useEffect(() => {
     if (!preset) return;
-    const next = { ...DEFAULT_CONFIG, ...preset.patch };
+    const next = { ...DEFAULT_CONFIG, ...preset.patch, tech: cfgRef.current.tech };
     setCfg(next);
     setSim(addLog(freshSim(next), 'info', `Loaded layout: ${preset.name}`));
     setBp(null);
@@ -140,7 +171,7 @@ export default function Simulator({ preset }) {
   const loadScenario = (id) => {
     const sc = SCENARIOS.find((x) => x.id === id);
     if (!sc) return;
-    setCfg(sc.patch);
+    setCfg({ ...sc.patch, tech: cfg.tech });
     setSim(addLog(freshSim(sc.patch), 'info', `Scenario: ${sc.name}. ${sc.desc}`));
     setBp(null);
   };
@@ -163,11 +194,11 @@ export default function Simulator({ preset }) {
         </div>
         <div className="kpis">
           <Kpi label="Users online" value={fmt(r.users)} />
-          <Kpi label="Offered" value={`${fmt(r.raw)}/s`} />
-          <Kpi label="Served OK" value={`${fmt(r.served)}/s`} />
-          <Kpi label="Errors" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} />
-          <Kpi label="p95 latency" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} />
-          <Kpi label="Uptime est." value={`${(r.avail * 100).toFixed(r.avail > 0.9999 ? 3 : 2)}%`} />
+          <Kpi label="Offered" info="rps" value={`${fmt(r.raw)}/s`} />
+          <Kpi label="Served OK" info="rps" value={`${fmt(r.served)}/s`} />
+          <Kpi label="Errors" info="errorrate" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} />
+          <Kpi label="p95 latency" info="p95" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} />
+          <Kpi label="Uptime est." info="availability" value={`${(r.avail * 100).toFixed(r.avail > 0.9999 ? 3 : 2)}%`} />
           <Kpi label="Cost / month" value={`$${fmt(r.costHr * 730)}`} />
         </div>
       </div>
@@ -183,10 +214,10 @@ export default function Simulator({ preset }) {
           <div className="panel-label mono">TRAFFIC</div>
           <Slider label="Users online" min={100} max={800} value={Math.round(Math.log10(cfg.users) * 100)} display={fmt(cfg.users)}
             onChange={(v) => update({ users: Math.round(Math.pow(10, v / 100)) })} hint="Concurrent active users (log scale)" />
-          <Slider label="Requests / user / min" min={1} max={60} value={cfg.reqPerMin} onChange={(v) => update({ reqPerMin: v })} />
-          <Slider label="Reads vs writes" min={0} max={100} value={cfg.readPct} display={`${cfg.readPct}% R / ${100 - cfg.readPct}% W`} onChange={(v) => update({ readPct: v })} />
-          <Slider label="Static assets" min={0} max={80} value={cfg.staticPct} display={`${cfg.staticPct}%`} onChange={(v) => update({ staticPct: v })} hint="Images / JS / CSS share of requests" />
-          <Slider label="Bot / abusive traffic" min={0} max={60} value={cfg.botPct} display={`${cfg.botPct}%`} onChange={(v) => update({ botPct: v })} />
+          <Slider label="Requests / user / min" info="rps" min={1} max={60} value={cfg.reqPerMin} onChange={(v) => update({ reqPerMin: v })} />
+          <Slider label="Reads vs writes" info="readwrite" min={0} max={100} value={cfg.readPct} display={`${cfg.readPct}% R / ${100 - cfg.readPct}% W`} onChange={(v) => update({ readPct: v })} />
+          <Slider label="Static assets" info="static" min={0} max={80} value={cfg.staticPct} display={`${cfg.staticPct}%`} onChange={(v) => update({ staticPct: v })} hint="Images / JS / CSS share of requests" />
+          <Slider label="Bot / abusive traffic" info="bot" min={0} max={60} value={cfg.botPct} display={`${cfg.botPct}%`} onChange={(v) => update({ botPct: v })} />
           <Segmented label="Traffic pattern" value={cfg.pattern} onChange={(v) => update({ pattern: v }, `Timetable: ${v}`)}
             options={[{ value: 'steady', label: 'Steady' }, { value: 'wave', label: 'Daily wave' }, { value: 'ramp', label: 'Viral growth' }, { value: 'spike', label: 'Flash sales' }]} />
           <button className="btn danger full" onClick={spike}>⚡ Trigger 5× traffic spike</button>
@@ -194,39 +225,71 @@ export default function Simulator({ preset }) {
           <div className="panel-label mono">BUILD · TOGGLE COMPONENTS</div>
           <div className="build">
             {[
-              ['cdn', 'CDN', 'Edge cache for static'],
-              ['gateway', 'Rate limiter', 'API gateway, blocks bots'],
-              ['lb', 'Load balancer', 'Spread across servers'],
-              ['cache', 'Cache', 'Redis for reads'],
-              ['queue', 'Queue', 'Async writes + workers'],
-              ['pooler', 'Conn. pooler', 'PgBouncer'],
-              ['breaker', 'Circuit breaker', 'Stop cascades'],
-              ['autoscale', 'Auto-scaling', 'Elastic app tier'],
-            ].map(([k, l, h]) => (
-              <button key={k} className={cfg[k] ? 'bld on' : 'bld'} onClick={() => update({ [k]: !cfg[k], ...(k === 'lb' && !cfg.lb && cfg.servers < 2 ? { servers: 2 } : {}) }, `${cfg[k] ? 'Removed' : 'Built'}: ${l}`)} title={h}>
-                <span className="bld-dot" />
-                <span className="bld-l">{l}</span>
-                <span className="bld-h">{h}</span>
-              </button>
+              ['cdn', 'CDN', `${shortTech(cfg, 'cdn')}: static at the edge`, 'cdn'],
+              ['gateway', 'Rate limiter', `${shortTech(cfg, 'gateway')}: blocks bots`, 'ratelimit'],
+              ['lb', 'Load balancer', `${shortTech(cfg, 'lb')}: spreads load`, 'lb'],
+              ['cache', 'Cache', `${shortTech(cfg, 'cache')}: fast reads`, 'cache'],
+              ['queue', 'Queue', `${shortTech(cfg, 'queue')} + workers`, 'queue'],
+              ['pooler', 'Conn. pooler', `${shortTech(cfg, 'pooler')}`, 'pool'],
+              ['breaker', 'Circuit breaker', `${shortTech(cfg, 'breaker')}: stops cascades`, 'breaker'],
+              ['autoscale', 'Auto-scaling', `${shortTech(cfg, 'platform')}`, 'autoscale'],
+            ].map(([k, l, h, term]) => (
+              <div key={k} className="bld-wrap">
+                <button className={cfg[k] ? 'bld on' : 'bld'} onClick={() => update({ [k]: !cfg[k], ...(k === 'lb' && !cfg.lb && cfg.servers < 2 ? { servers: 2 } : {}) }, `${cfg[k] ? 'Removed' : 'Built'}: ${l}`)} title={h}>
+                  <span className="bld-dot" />
+                  <span className="bld-l">{l}</span>
+                  <span className="bld-h">{h}</span>
+                </button>
+                <Info term={term} label={l} />
+              </div>
             ))}
           </div>
-          <Segmented label="Regions (multi-region active-active)" value={cfg.regions} onChange={(v) => update({ regions: v }, `Regions → ${v}`)} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} />
+          <Segmented info="region" label="Regions (multi-region active-active)" value={cfg.regions} onChange={(v) => update({ regions: v }, `Regions → ${v}`)} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} />
         </aside>
 
-        <main className="panel sim-center">
+        <main className={`panel sim-center ${fs ? 'fs' : ''}`}>
           <div className="map-head">
-            <span className="panel-label mono">LIVE LINE DIAGRAM · click a station to configure it</span>
+            <span className="panel-label mono">LIVE LINE DIAGRAM · drag to move · ctrl/⌘ + scroll to zoom · click a station</span>
             <span className="map-legend mono">
               {['green', 'amber', 'red', 'broken'].map((s) => <span key={s}><i style={{ background: STATUS_COLOR[s] }} />{{ green: '<60%', amber: '60–85%', red: '85–100%', broken: 'overloaded / errors' }[s]}</span>)}
+              <Info term="utilization" label="load colours" />
             </span>
+            <button className="btn small fs-btn" onClick={toggleFs}>{fs ? '⤡ Exit full screen' : '⤢ Full screen'}</button>
           </div>
-          <SimMap r={r} cfg={cfg} servers={runtimeServers} booting={cfg.autoscale ? sim.booting.length : 0} selected={selected} onSelect={setSelected} />
+          {fs && (
+            <div className="fs-bar">
+              <span className={`clock-lamp st-${status}`} />
+              <span className="mono clock-t">{clock(sim.t)}</span>
+              <button className="btn small" onClick={() => setRunning((v) => !v)}>{running ? '❚❚ Pause' : '▶ Run'}</button>
+              <div className="seg small">
+                {SPEEDS.map((s) => <button key={s.value} className={speed === s.value ? 'on' : ''} onClick={() => setSpeed(s.value)}>{s.label}</button>)}
+              </div>
+              <button className="btn small danger" onClick={spike}>⚡ Spike</button>
+              <div className="kpis">
+                <Kpi label="Users" value={fmt(r.users)} />
+                <Kpi label="Served OK" info="rps" value={`${fmt(r.served)}/s`} />
+                <Kpi label="Errors" info="errorrate" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} />
+                <Kpi label="p95" info="p95" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} />
+                <Kpi label="Cost / mo" value={`$${fmt(r.costHr * 730)}`} />
+              </div>
+            </div>
+          )}
+          <div className="map-stage">
+            <SimMap r={r} cfg={cfg} servers={runtimeServers} booting={cfg.autoscale ? sim.booting.length : 0} selected={selected} onSelect={selectStation} fullscreen={fs} />
+            {fs && fsInsp && (
+              <aside className="fs-insp panel">
+                <button className="btn ghost small fs-insp-close" onClick={() => setFsInsp(false)} aria-label="Hide inspector">✕</button>
+                <Inspector id={selected} cfg={cfg} r={r} update={update} sim={sim} />
+              </aside>
+            )}
+            {fs && !fsInsp && <button className="btn small fs-insp-open" onClick={() => setFsInsp(true)}>☰ Inspector</button>}
+          </div>
 
           <div className="charts">
-            <Sparkline label="THROUGHPUT req/s" value={fmt(r.served)} unit="/s" series={[{ name: 'offered', color: '#5c6a7a', data: H.map((h) => h.offered) }, { name: 'served', color: '#3ddc84', fill: true, data: H.map((h) => h.served) }]} />
-            <Sparkline label="ERROR RATE" value={pct(r.errRate)} max={Math.max(5, ...H.map((h) => h.err)) * 1.1} series={[{ name: 'errors', color: '#ff4d4f', fill: true, data: H.map((h) => h.err) }]} />
-            <Sparkline label="p95 LATENCY" value={ms(r.p95)} series={[{ name: 'p95', color: '#ffb020', fill: true, data: H.map((h) => h.p95) }]} />
-            <Sparkline label="APP SERVERS" value={runtimeServers * cfg.regions} series={[{ name: 'servers', color: '#4da3ff', fill: true, data: H.map((h) => h.servers) }]} />
+            <Sparkline info="rps" label="THROUGHPUT req/s" value={fmt(r.served)} unit="/s" series={[{ name: 'offered', color: '#5c6a7a', data: H.map((h) => h.offered) }, { name: 'served', color: '#3ddc84', fill: true, data: H.map((h) => h.served) }]} />
+            <Sparkline info="errorrate" label="ERROR RATE" value={pct(r.errRate)} max={Math.max(5, ...H.map((h) => h.err)) * 1.1} series={[{ name: 'errors', color: '#ff4d4f', fill: true, data: H.map((h) => h.err) }]} />
+            <Sparkline info="p95" label="p95 LATENCY" value={ms(r.p95)} series={[{ name: 'p95', color: '#ffb020', fill: true, data: H.map((h) => h.p95) }]} />
+            <Sparkline info="horizontal" label="APP SERVERS" value={runtimeServers * cfg.regions} series={[{ name: 'servers', color: '#4da3ff', fill: true, data: H.map((h) => h.servers) }]} />
           </div>
           {!H.length && <p className="dim small center">Press ▶ Run to start the clock and record history.</p>}
         </main>
@@ -240,7 +303,10 @@ export default function Simulator({ preset }) {
         <section className="panel advisor">
           <div className="adv-head">
             <span className="panel-label mono">DISPATCHER · WHAT TO DO NEXT</span>
-            <button className="btn" onClick={breaking}>🔎 Find breaking point</button>
+            <span className="adv-actions">
+              <button className="btn" onClick={breaking}>🔎 Find breaking point</button>
+              <Info term="bottleneck" label="breaking point" />
+            </span>
           </div>
           {bp && (
             <div className="bp">
@@ -255,7 +321,7 @@ export default function Simulator({ preset }) {
           {advice.length === 0 && <p className="dim">All signals green. Push more users, trigger a spike, or switch to <i>Viral growth</i> to find the next limit.</p>}
           <ul className="adv-list">
             {advice.slice(0, 6).map((a, i) => (
-              <li key={i} className={`adv ${a.severity}`}>
+              <li key={i} className={`adv sev-${a.severity}`}>
                 <div>
                   <div className="adv-title"><span className="adv-sev mono">{a.severity}</span>{a.title}</div>
                   <div className="adv-detail">{a.detail}</div>
@@ -279,29 +345,82 @@ export default function Simulator({ preset }) {
   );
 }
 
-function Kpi({ label, value, tone }) {
+function Kpi({ label, value, tone, info }) {
   return (
     <div className={`kpi ${tone || ''}`}>
-      <span className="kpi-l mono">{label}</span>
+      <span className="kpi-l mono">{label}{info && <Info term={info} label={label} />}</span>
       <span className="kpi-v mono">{value}</span>
     </div>
   );
 }
 
-function Stat({ k, v, tone }) {
-  return <div className={`stat ${tone || ''}`}><span>{k}</span><b className="mono">{v}</b></div>;
+function Stat({ k, v, tone, info }) {
+  return <div className={`stat ${tone || ''}`}><span>{k}{info && <Info term={info} label={k} />}</span><b className="mono">{v}</b></div>;
+}
+
+function StationGuide({ id, cfg, update }) {
+  const info = STATION_INFO[id];
+  if (!info) return null;
+  return (
+    <div className="guide">
+      <details className="guide-explain" open>
+        <summary className="mono">WHAT IS THIS?</summary>
+        <p><b>What:</b> {info.what}</p>
+        <p><b>Why:</b> {info.why}</p>
+        <p className="dim"><b>In this simulator:</b> {info.model}</p>
+      </details>
+      {info.pickers.map((key) => {
+        const pk = PICKERS[key];
+        const cur = cfg.tech?.[key] ?? TECH_DEFAULTS[key];
+        const opt = pk.options.find((x) => x.id === cur) || pk.options[0];
+        return (
+          <div key={key} className="tech">
+            <label className="field-label" htmlFor={`tech-${key}`}>{pk.label}</label>
+            <select id={`tech-${key}`} className="select" value={opt.id}
+              onChange={(e) => {
+                const next = pk.options.find((x) => x.id === e.target.value);
+                update({ tech: { ...cfg.tech, [key]: next.id } }, `Technology: ${pk.label} → ${next.name}`);
+              }}>
+              {pk.options.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+            <div className="tech-card">
+              <span className="tech-kind mono">{opt.kind}</span>
+              <span>{opt.note}</span>
+            </div>
+            <details className="tech-compare">
+              <summary>Compare all {pk.options.length} options</summary>
+              <ul>
+                {pk.options.map((x) => (
+                  <li key={x.id} className={x.id === opt.id ? 'on' : ''}>
+                    <b>{x.name}</b> <span className="mono dim">{x.kind}</span>
+                    <div className="dim">{x.note}</div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        );
+      })}
+      {info.pickers.length > 0 && <p className="tech-foot dim">Names are labels for learning. The capacity model is the same for every option.</p>}
+    </div>
+  );
 }
 
 function Inspector({ id, cfg, r, update, sim }) {
   const t = r.tiers;
   const sc = serverCapacity(cfg.vcpu, cfg.ram);
   const tone = (rho) => (rho >= 1 ? 'bad' : rho >= 0.85 ? 'warn' : '');
+  const TERM = { users: 'rps', dns: 'dns', cdn: 'cdn', gateway: 'gateway', lb: 'lb', app: 'server', cache: 'cache', db: 'database', queue: 'queue', workers: 'worker' };
   const head = (title, sub) => (
-    <header className="insp-head">
-      <div className="panel-label mono">STATION INSPECTOR</div>
-      <h3>{title}</h3>
-      <p className="dim small">{sub}</p>
-    </header>
+    <>
+      <header className="insp-head">
+        <div className="panel-label mono">STATION INSPECTOR</div>
+        <h3>{title}<Info term={TERM[id]} label={title} /></h3>
+        <p className="dim small">{sub}</p>
+      </header>
+      <StationGuide id={id} cfg={cfg} update={update} />
+      <div className="sub-label mono">SETTINGS &amp; LIVE STATS</div>
+    </>
   );
 
   switch (id) {
@@ -309,99 +428,99 @@ function Inspector({ id, cfg, r, update, sim }) {
       return (<div>{head('Users', 'Where traffic starts. Change load in the Traffic panel.')}
         <Stat k="Online users" v={fmt(r.users)} />
         <Stat k="Total requests" v={`${fmt(r.raw)}/s`} />
-        <Stat k="Of which bots" v={`${fmt(r.bot)}/s`} />
-        <Stat k="Blocked by limiter" v={`${fmt(r.blocked)}/s`} />
-        <Stat k="p50 / p95" v={`${ms(r.p50)} / ${ms(r.p95)}`} />
+        <Stat k="Of which bots" info="bot" v={`${fmt(r.bot)}/s`} />
+        <Stat k="Blocked by limiter" info="ratelimit" v={`${fmt(r.blocked)}/s`} />
+        <Stat k="p50 / p95" info="p95" v={`${ms(r.p50)} / ${ms(r.p95)}`} />
         <p className="note">Requests/s = users × requests per minute ÷ 60. 100k users at 6 req/min is 10k req/s.</p>
       </div>);
     case 'dns':
       return (<div>{head('DNS / Global routing', 'Maps your domain to an entry point. With several regions, GeoDNS sends users to the nearest one.')}
-        <Segmented label="Regions" value={cfg.regions} onChange={(v) => update({ regions: v }, `Regions → ${v}`)} options={[1, 2, 3]} />
-        <Stat k="Network round trip" v={ms(t.users.lat)} />
+        <Segmented label="Regions" info="region" value={cfg.regions} onChange={(v) => update({ regions: v }, `Regions → ${v}`)} options={[1, 2, 3]} />
+        <Stat k="Network round trip" info="latency" v={ms(t.users.lat)} />
         <p className="note">Each region runs a full copy of the stack (servers, cache, read replicas). Writes still go to the primary. More regions mean lower latency and higher availability, at higher cost.</p>
       </div>);
     case 'cdn':
       return (<div>{head('CDN edge', 'Serves static assets from PoPs near users.')}
         <Toggle label="CDN enabled" checked={cfg.cdn} onChange={(v) => update({ cdn: v }, `${v ? 'Built' : 'Removed'}: CDN`)} />
-        <Slider label="Static share of traffic" min={0} max={80} value={cfg.staticPct} display={`${cfg.staticPct}%`} onChange={(v) => update({ staticPct: v })} />
+        <Slider label="Static share of traffic" info="static" min={0} max={80} value={cfg.staticPct} display={`${cfg.staticPct}%`} onChange={(v) => update({ staticPct: v })} />
         <Stat k="Edge traffic" v={`${fmt(t.cdn.in)}/s`} />
         <Stat k="Origin offload" v={cfg.cdn ? `${fmt(t.cdn.in * 0.95)}/s` : '0'} />
         <p className="note">Without a CDN, every image and JS file is handled by your app servers and travels the full distance to the user.</p>
       </div>);
     case 'gateway':
       return (<div>{head('API Gateway / Rate limiter', 'Front door: auth, quotas, and blocking abusive traffic with 429s.')}
-        <Toggle label="Gateway + rate limiter" checked={cfg.gateway} onChange={(v) => update({ gateway: v }, `${v ? 'Built' : 'Removed'}: rate limiter`)} />
-        <Slider label="Bot / abusive traffic" min={0} max={60} value={cfg.botPct} display={`${cfg.botPct}%`} onChange={(v) => update({ botPct: v })} />
+        <Toggle label="Gateway + rate limiter" info="ratelimit" checked={cfg.gateway} onChange={(v) => update({ gateway: v }, `${v ? 'Built' : 'Removed'}: rate limiter`)} />
+        <Slider label="Bot / abusive traffic" info="bot" min={0} max={60} value={cfg.botPct} display={`${cfg.botPct}%`} onChange={(v) => update({ botPct: v })} />
         <Stat k="Incoming" v={`${fmt(t.gateway.in)}/s`} />
         <Stat k="Blocked (429)" v={`${fmt(t.gateway.blocked)}/s`} />
-        <Stat k="Utilisation" v={cfg.gateway ? pct(t.gateway.rho) : '—'} tone={tone(t.gateway.rho)} />
+        <Stat k="Utilisation" info="utilization" v={cfg.gateway ? pct(t.gateway.rho) : '—'} tone={tone(t.gateway.rho)} />
       </div>);
     case 'lb':
       return (<div>{head('Load balancer', 'Spreads requests across app servers and removes unhealthy ones.')}
         <Toggle label="Load balancer" checked={cfg.lb} onChange={(v) => update({ lb: v, ...(v && cfg.servers < 2 ? { servers: 2 } : {}) }, `${v ? 'Built' : 'Removed'}: load balancer`)} />
-        <Slider label="LB nodes" min={1} max={8} value={cfg.lbNodes} onChange={(v) => update({ lbNodes: v })} hint="≥2 removes the LB as a single point of failure. ~50k rps each." />
-        <Segmented label="Algorithm" value={cfg.lbAlgo} onChange={(v) => update({ lbAlgo: v }, `LB algorithm → ${v}`)}
+        <Slider label="LB nodes" info="spof" min={1} max={8} value={cfg.lbNodes} onChange={(v) => update({ lbNodes: v })} hint="≥2 removes the LB as a single point of failure. ~50k rps each." />
+        <Segmented label="Algorithm" info="roundrobin" value={cfg.lbAlgo} onChange={(v) => update({ lbAlgo: v }, `LB algorithm → ${v}`)}
           options={[{ value: 'round-robin', label: 'Round robin' }, { value: 'least-conn', label: 'Least conn' }, { value: 'ip-hash', label: 'IP hash' }]} />
-        <Stat k="Throughput" v={`${fmt(t.lb.in)}/s`} />
-        <Stat k="Utilisation" v={cfg.lb ? pct(t.lb.rho) : '—'} tone={tone(t.lb.rho)} />
+        <Stat k="Throughput" info="rps" v={`${fmt(t.lb.in)}/s`} />
+        <Stat k="Utilisation" info="utilization" v={cfg.lb ? pct(t.lb.rho) : '—'} tone={tone(t.lb.rho)} />
         <p className="note">IP hash pins each user to one server (sticky): sessions survive, but load spreads less evenly.</p>
       </div>);
     case 'app':
       return (<div>{head('App servers', 'Vertical scaling = bigger servers. Horizontal scaling = more servers.')}
-        <div className="sub-label mono">VERTICAL · per server</div>
-        <StepSlider label="vCPU" steps={VCPU_STEPS} value={cfg.vcpu} onChange={(v) => update({ vcpu: v })} hint={`CPU limit ≈ ${fmt(sc.cpu)} rps/server`} />
-        <StepSlider label="RAM" steps={RAM_STEPS} value={cfg.ram} unit=" GB" onChange={(v) => update({ ram: v })} hint={`Memory limit ≈ ${fmt(sc.mem)} rps/server (in-flight requests)`} />
-        <div className="sub-label mono">HORIZONTAL · fleet</div>
-        <Slider label="Servers" min={1} max={200} value={cfg.servers} disabled={cfg.autoscale} onChange={(v) => update({ servers: v })} display={cfg.autoscale ? `auto (${sim.servers})` : cfg.servers} hint={!cfg.lb && cfg.servers > 1 ? '⚠ needs a load balancer to be used' : undefined} />
-        <Toggle label="Auto-scaling" checked={cfg.autoscale} onChange={(v) => update({ autoscale: v }, `${v ? 'Enabled' : 'Disabled'}: auto-scaling`)} hint="Adds servers when CPU passes target (60 s boot)" />
+        <div className="sub-label mono">VERTICAL · per server<Info term="vertical" label="vertical scaling" /></div>
+        <StepSlider label="vCPU" info="cpu" steps={VCPU_STEPS} value={cfg.vcpu} onChange={(v) => update({ vcpu: v })} hint={`CPU limit ≈ ${fmt(sc.cpu)} rps/server`} />
+        <StepSlider label="RAM" info="ram" steps={RAM_STEPS} value={cfg.ram} unit=" GB" onChange={(v) => update({ ram: v })} hint={`Memory limit ≈ ${fmt(sc.mem)} rps/server (in-flight requests)`} />
+        <div className="sub-label mono">HORIZONTAL · fleet<Info term="horizontal" label="horizontal scaling" /></div>
+        <Slider label="Servers" info="server" min={1} max={200} value={cfg.servers} disabled={cfg.autoscale} onChange={(v) => update({ servers: v })} display={cfg.autoscale ? `auto (${sim.servers})` : cfg.servers} hint={!cfg.lb && cfg.servers > 1 ? '⚠ needs a load balancer to be used' : undefined} />
+        <Toggle label="Auto-scaling" info="autoscale" checked={cfg.autoscale} onChange={(v) => update({ autoscale: v }, `${v ? 'Enabled' : 'Disabled'}: auto-scaling`)} hint="Adds servers when CPU passes target (60 s boot)" />
         {cfg.autoscale && (<>
           <Slider label="Min servers" min={1} max={100} value={cfg.asMin} onChange={(v) => update({ asMin: Math.min(v, cfg.asMax) })} />
           <Slider label="Max servers" min={2} max={200} value={cfg.asMax} onChange={(v) => update({ asMax: Math.max(v, cfg.asMin) })} />
-          <Slider label="Target CPU" min={30} max={90} value={cfg.asTarget} display={`${cfg.asTarget}%`} onChange={(v) => update({ asTarget: v })} />
+          <Slider label="Target CPU" info="utilization" min={30} max={90} value={cfg.asTarget} display={`${cfg.asTarget}%`} onChange={(v) => update({ asTarget: v })} />
         </>)}
-        <Segmented label="Session storage" value={cfg.sessions} onChange={(v) => update({ sessions: v }, `Sessions → ${v}`)}
+        <Segmented label="Session storage" info="session" value={cfg.sessions} onChange={(v) => update({ sessions: v }, `Sessions → ${v}`)}
           options={[{ value: 'memory', label: 'In memory' }, { value: 'sticky', label: 'Sticky LB' }, { value: 'shared', label: 'Shared Redis' }]} />
-        <Toggle label="Circuit breakers" checked={cfg.breaker} onChange={(v) => update({ breaker: v }, `${v ? 'Built' : 'Removed'}: circuit breakers`)} hint="Fail fast when the DB is overloaded" />
-        <Stat k="Per-server capacity" v={`${fmt(sc.cap)} rps (${sc.bound}-bound)`} />
+        <Toggle label="Circuit breakers" info="breaker" checked={cfg.breaker} onChange={(v) => update({ breaker: v }, `${v ? 'Built' : 'Removed'}: circuit breakers`)} hint="Fail fast when the DB is overloaded" />
+        <Stat k="Per-server capacity" info="bottleneck" v={`${fmt(sc.cap)} rps (${sc.bound}-bound)`} />
         <Stat k="Fleet capacity" v={`${fmt(t.app.cap)} rps`} />
         <Stat k="Load" v={`${fmt(t.app.work)} rps-eq`} />
-        <Stat k="Utilisation" v={pct(t.app.rho)} tone={tone(t.app.rho)} />
-        <Stat k="Latency in tier" v={ms(t.app.lat)} />
+        <Stat k="Utilisation" info="utilization" v={pct(t.app.rho)} tone={tone(t.app.rho)} />
+        <Stat k="Latency in tier" info="latency" v={ms(t.app.lat)} />
       </div>);
     case 'cache':
       return (<div>{head('Cache (Redis)', 'Cache-aside: check memory first, fall back to the DB on a miss.')}
         <Toggle label="Cache enabled" checked={cfg.cache} onChange={(v) => update({ cache: v }, `${v ? 'Built' : 'Removed'}: cache`)} />
-        <StepSlider label="Cache size" steps={[1, 2, 4, 8, 16, 32, 64, 128, 256, 512]} value={cfg.cacheGb} unit=" GB" onChange={(v) => update({ cacheGb: v })} />
-        <Stat k="Hit rate" v={pct(t.cache.hit)} />
-        <Stat k="Hot working set" v={`${fmt(t.db.node.ws)} GB`} />
+        <StepSlider label="Cache size" info="workingset" steps={[1, 2, 4, 8, 16, 32, 64, 128, 256, 512]} value={cfg.cacheGb} unit=" GB" onChange={(v) => update({ cacheGb: v })} />
+        <Stat k="Hit rate" info="hitrate" v={pct(t.cache.hit)} />
+        <Stat k="Hot working set" info="workingset" v={`${fmt(t.db.node.ws)} GB`} />
         <Stat k="Reads served from memory" v={`${fmt(t.cache.in * t.cache.hit)}/s`} />
         <p className="note">Hit rate depends on cache size relative to the working set. Bigger user bases need bigger caches.</p>
       </div>);
     case 'db':
       return (<div>{head('Database', 'Usually the hardest tier to scale. Scale up first, then replicas for reads, then shards for writes.')}
-        <div className="sub-label mono">VERTICAL · per node</div>
-        <StepSlider label="DB vCPU" steps={VCPU_STEPS} value={cfg.dbVcpu} onChange={(v) => update({ dbVcpu: v })} />
-        <StepSlider label="DB RAM" steps={RAM_STEPS} value={cfg.dbRam} unit=" GB" onChange={(v) => update({ dbRam: v })} hint="Working set should fit in memory" />
-        <div className="sub-label mono">HORIZONTAL</div>
-        <Slider label="Read replicas / shard" min={0} max={8} value={cfg.replicas} onChange={(v) => update({ replicas: v }, `Read replicas → ${v}`)} />
-        <Slider label="Shards" min={1} max={64} value={cfg.shards} onChange={(v) => update({ shards: v }, `Shards → ${v}`)} />
-        <Toggle label="Connection pooler" checked={cfg.pooler} onChange={(v) => update({ pooler: v }, `${v ? 'Built' : 'Removed'}: connection pooler`)} hint="Multiplexes app connections" />
-        <Stat k="Writes" v={`${fmt(t.db.writes)}/s of ${fmt(t.db.writeCap)}`} tone={tone(t.db.primaryRho)} />
+        <div className="sub-label mono">VERTICAL · per node<Info term="vertical" label="vertical scaling" /></div>
+        <StepSlider label="DB vCPU" info="cpu" steps={VCPU_STEPS} value={cfg.dbVcpu} onChange={(v) => update({ dbVcpu: v })} />
+        <StepSlider label="DB RAM" info="ram" steps={RAM_STEPS} value={cfg.dbRam} unit=" GB" onChange={(v) => update({ dbRam: v })} hint="Working set should fit in memory" />
+        <div className="sub-label mono">HORIZONTAL<Info term="horizontal" label="horizontal scaling" /></div>
+        <Slider label="Read replicas / shard" info="replica" min={0} max={8} value={cfg.replicas} onChange={(v) => update({ replicas: v }, `Read replicas → ${v}`)} />
+        <Slider label="Shards" info="shard" min={1} max={64} value={cfg.shards} onChange={(v) => update({ shards: v }, `Shards → ${v}`)} />
+        <Toggle label="Connection pooler" info="pool" checked={cfg.pooler} onChange={(v) => update({ pooler: v }, `${v ? 'Built' : 'Removed'}: connection pooler`)} hint="Multiplexes app connections" />
+        <Stat k="Writes" info="readwrite" v={`${fmt(t.db.writes)}/s of ${fmt(t.db.writeCap)}`} tone={tone(t.db.primaryRho)} />
         <Stat k="Reads" v={`${fmt(t.db.reads)}/s`} />
-        <Stat k="Primary load" v={pct(t.db.primaryRho)} tone={tone(t.db.primaryRho)} />
-        {cfg.replicas > 0 && <Stat k="Replica load" v={pct(t.db.replicaRho)} tone={tone(t.db.replicaRho)} />}
-        <Stat k="Connections" v={`${fmt(t.db.connNeeded)} / ${fmt(t.db.connMax)}`} tone={t.db.connErrFrac > 0 ? 'bad' : ''} />
-        <Stat k="Working set / RAM per node" v={`${fmt(t.db.node.wsShard)} / ${cfg.dbRam} GB`} tone={t.db.node.ramFactor < 1 ? 'warn' : ''} />
-        <Stat k="Read / write latency" v={`${ms(t.db.readLat)} / ${ms(t.db.writeLat)}`} />
+        <Stat k="Primary load" info="utilization" v={pct(t.db.primaryRho)} tone={tone(t.db.primaryRho)} />
+        {cfg.replicas > 0 && <Stat k="Replica load" info="replica" v={pct(t.db.replicaRho)} tone={tone(t.db.replicaRho)} />}
+        <Stat k="Connections" info="pool" v={`${fmt(t.db.connNeeded)} / ${fmt(t.db.connMax)}`} tone={t.db.connErrFrac > 0 ? 'bad' : ''} />
+        <Stat k="Working set / RAM per node" info="workingset" v={`${fmt(t.db.node.wsShard)} / ${cfg.dbRam} GB`} tone={t.db.node.ramFactor < 1 ? 'warn' : ''} />
+        <Stat k="Read / write latency" info="latency" v={`${ms(t.db.readLat)} / ${ms(t.db.writeLat)}`} />
       </div>);
     case 'queue':
     case 'workers':
       return (<div>{head('Queue + workers', 'Writes are acknowledged instantly and processed asynchronously. Spikes become backlog instead of errors.')}
-        <Toggle label="Queue writes" checked={cfg.queue} onChange={(v) => update({ queue: v }, `${v ? 'Built' : 'Removed'}: queue`)} />
-        <Slider label="Workers" min={1} max={256} value={cfg.workers} onChange={(v) => update({ workers: v })} hint="~500 jobs/s each" />
+        <Toggle label="Queue writes" info="queue" checked={cfg.queue} onChange={(v) => update({ queue: v }, `${v ? 'Built' : 'Removed'}: queue`)} />
+        <Slider label="Workers" info="worker" min={1} max={256} value={cfg.workers} onChange={(v) => update({ workers: v })} hint="~500 jobs/s each" />
         <Stat k="Incoming writes" v={`${fmt(t.queue.in)}/s`} />
-        <Stat k="Drain rate" v={`${fmt(t.queue.drain)}/s`} />
-        <Stat k="Backlog" v={fmt(t.queue.backlog)} tone={t.queue.growth > 0 ? 'warn' : ''} />
+        <Stat k="Drain rate" info="backpressure" v={`${fmt(t.queue.drain)}/s`} />
+        <Stat k="Backlog" info="backlog" v={fmt(t.queue.backlog)} tone={t.queue.growth > 0 ? 'warn' : ''} />
         <Stat k="Trend" v={t.queue.growth > 0 ? `+${fmt(t.queue.growth)}/s` : 'stable / draining'} />
         <p className="note">If the backlog keeps growing, either workers are too few or the DB can’t absorb the writes. In that case, shard.</p>
       </div>);

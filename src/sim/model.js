@@ -1,3 +1,5 @@
+import { TECH_DEFAULTS } from './tech.js';
+
 // A deliberately simple capacity model for teaching. Numbers are plausible
 // orders of magnitude, not benchmarks. Each tier: offered load vs capacity,
 // queueing latency ~ 1/(1-ρ), overflow becomes errors.
@@ -36,6 +38,7 @@ export const DEFAULT_CONFIG = {
   queue: false,
   workers: 2,
   breaker: false,
+  tech: { ...TECH_DEFAULTS },
 };
 
 const q = (rho) => 1 / (1 - Math.min(rho, 0.97));
