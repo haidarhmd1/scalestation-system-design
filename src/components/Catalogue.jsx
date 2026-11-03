@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, LEVELS, PATTERNS } from '../data/patterns.js';
 import FlowDiagram from './FlowDiagram.jsx';
+import ArchCompare, { CompareTeaser } from './ArchCompare.jsx';
 import { NeedLists, useGlossary } from './Glossary.jsx';
 import { GLOSSARY, termsIn } from '../data/glossary.js';
 
@@ -8,6 +9,9 @@ export default function Catalogue({ onTrySim, openRequest, onBuild }) {
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState('All');
   const [openId, setOpenId] = useState(null);
+  const [compareStart, setCompareStart] = useState(null); // null = pop-up closed
+  const compare = (a, b) => { setOpenId(null); setCompareStart({ a, b, key: Date.now() }); };
+  const openFromCompare = (id) => { setCompareStart(null); setOpenId(id); };
   useEffect(() => { if (openRequest?.id) setOpenId(openRequest.id); }, [openRequest]);
 
   const filtered = useMemo(() => {
@@ -24,7 +28,9 @@ export default function Catalogue({ onTrySim, openRequest, onBuild }) {
           <div className="eyebrow mono">NETWORK MAP · {PATTERNS.length} STATIONS · 5 LINES</div>
           <h1>Learn system design by building, scaling and breaking it.</h1>
           <p className="lede">Ride from a single server to planet-scale databases. Each station is a pattern: click it to watch a request travel through the system step by step, then try it in the <b>Simulator</b>.</p>
-          {onBuild && <button className="btn primary build-cta" onClick={onBuild}>Ready to build it yourself? Start the Build Your Own track →</button>}
+          <div className="hero-ctas">
+            {onBuild && <button className="btn primary build-cta" onClick={onBuild}>Ready to build it yourself? Start the Build Your Own track →</button>}
+          </div>
         </div>
         <div className="legend">
           {LEVELS.map((l) => (
@@ -34,6 +40,11 @@ export default function Catalogue({ onTrySim, openRequest, onBuild }) {
               <span>{l.name}</span>
             </a>
           ))}
+          <button className="legend-row legend-compare" onClick={() => compare('monolith', 'microservices')}>
+            <span className="legend-line" />
+            <span className="mono">⇄ VS</span>
+            <span>Compare architecture styles</span>
+          </button>
         </div>
       </section>
 
@@ -78,12 +89,13 @@ export default function Catalogue({ onTrySim, openRequest, onBuild }) {
       })}
       {!filtered.length && <p className="dim empty">No stations match “{query}”.</p>}
 
-      {open && <PatternModal pattern={open} onClose={() => setOpenId(null)} onNav={setOpenId} onTrySim={onTrySim} />}
+      {compareStart && <ArchCompare key={compareStart.key} start={compareStart} onOpenPattern={openFromCompare} onClose={() => setCompareStart(null)} />}
+      {open && <PatternModal pattern={open} onClose={() => setOpenId(null)} onNav={setOpenId} onTrySim={onTrySim} onCompare={compare} />}
     </div>
   );
 }
 
-function PatternModal({ pattern: p, onClose, onNav, onTrySim }) {
+function PatternModal({ pattern: p, onClose, onNav, onTrySim, onCompare }) {
   const lv = LEVELS.find((l) => l.id === p.level);
   const idx = PATTERNS.indexOf(p);
   const prev = PATTERNS[idx - 1];
@@ -134,6 +146,7 @@ function PatternModal({ pattern: p, onClose, onNav, onTrySim }) {
               <Section title="Costs" tone="bad"><ul>{p.cons.map((u) => <li key={u}>{u}</li>)}</ul></Section>
             </div>
             {p.glossary && <NeedLists term={p.glossary} />}
+            <CompareTeaser id={p.id} onCompare={onCompare} />
             <Section title="Seen in the wild"><p className="dim">{p.examples}</p></Section>
             <KeyTerms text={`${p.title} ${p.summary} ${p.what} ${p.why} ${p.useWhen.join(' ')} ${p.pros.join(' ')} ${p.cons.join(' ')}`} />
           </div>

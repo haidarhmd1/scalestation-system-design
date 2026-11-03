@@ -651,3 +651,62 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .iac-pick .seg { max-width: 280px; margin: 6px 0 6px; }
 .iac-pick p { margin: 0; }
 @media (max-width: 600px) { .lang-cards { grid-template-columns: 1fr; } }
+
+/* ── architecture styles compared ────────────── */
+.compare { margin-top: 44px; scroll-margin-top: 110px; display: grid; gap: 12px; }
+.compare .line-head { margin-bottom: 0; }
+.compare-badge { background: #4da3ff; }
+.legend-compare { border-top: 1px dashed var(--border2); margin-top: 4px; padding-top: 8px; }
+.legend-compare .legend-line { background: repeating-linear-gradient(90deg, #4da3ff 0 6px, transparent 6px 10px); }
+.vs-pick { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin-bottom: 14px; }
+.vs-swap { font-size: 16px; }
+.vs-head, .vs-row { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.vs-title { padding: 10px 12px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--border); }
+.vs-title h3 { font-size: 17px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vs-title p { margin: 3px 0 8px; }
+.vs-title.anti { border-color: #5a2226; background: #1c1012; }
+.anti-tag { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #ff9d9e; border: 1px solid #5a2226; border-radius: 4px; padding: 1px 6px; }
+.vs-rows { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.vs-row { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.vs-row:last-child { border-bottom: 0; }
+.vs-row.same { color: var(--dim); }
+.vs-row.differs { background: #101a24; }
+.vs-row.differs .vs-dim { color: #9ccaff; }
+.vs-dim { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); padding-top: 2px; }
+.ops-score { display: inline-flex; align-items: center; gap: 3px; }
+.ops-score i { width: 14px; height: 6px; border-radius: 3px; background: #1f2935; }
+.ops-score i.on { background: var(--amber); }
+.ops-score .mono { font-size: 10.5px; margin-left: 6px; }
+.vs-proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.vs-pc h4 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 6px; color: var(--text); }
+.vs-pc ul { margin: 4px 0 8px; padding-left: 18px; font-size: 13px; }
+.pc-good b { color: var(--green); font-size: 12px; }
+.pc-bad b { color: #ff8a8b; font-size: 12px; }
+.vs-legend { margin: 6px 0 0; }
+.path { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.path-stop { width: 100%; display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg2); cursor: pointer; font-size: 13px; }
+.path-stop:hover { border-color: var(--blue); }
+.path-num { flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--blue); color: #06101c; font-weight: 700; font-size: 11px; }
+.linkish { background: none; border: 0; padding: 0; color: #9ccaff; text-decoration: underline; cursor: pointer; font: inherit; }
+.all-styles summary { cursor: pointer; font-size: 11px; letter-spacing: 0.12em; color: var(--dim); }
+.table-scroll { overflow-x: auto; margin-top: 10px; }
+.arch-table { min-width: 900px; }
+.arch-table th.anti { color: #ff9d9e; }
+.arch-table td { min-width: 130px; }
+.compare-teaser p { margin: 0 0 8px; }
+.teaser-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 760px) {
+  .vs-head, .vs-row { grid-template-columns: 1fr 1fr; }
+  .vs-head > div:first-child { display: none; }
+  .vs-dim { grid-column: 1 / -1; }
+  .vs-proscons { grid-template-columns: 1fr; }
+  .vs-pick { grid-template-columns: 1fr; }
+}
+
+/* comparison as a pop-up */
+.hero-ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+.legend-compare { width: 100%; background: none; border: 0; border-top: 1px dashed var(--border2); color: inherit; cursor: pointer; text-align: left; font: inherit; font-size: 13px; }
+.legend-compare:hover { color: #fff; }
+.compare-modal { width: min(1180px, 100%); }
+.compare-body { overflow: auto; padding: 16px 20px 20px; display: grid; gap: 12px; }
+.compare-modal .modal-head .eyebrow { display: flex; gap: 8px; align-items: center; }
