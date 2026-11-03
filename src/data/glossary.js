@@ -573,6 +573,28 @@ export const GLOSSARY = {
     related: ['availability', 'replica', 'lb', 'healthcheck', 'region'],
     match: ['single point of failure', 'spof'],
   },
+  monitoring: {
+    title: 'Monitoring & metrics (Prometheus, Grafana)',
+    aka: 'observability · metrics · dashboards · Prometheus · Grafana · alerting',
+    origin: 'From Latin monere, “to warn”. Prometheus (named after the Greek Titan who brought fire to humans) was created at SoundCloud in 2012. Grafana started in 2014 as a dashboard tool and is now made by Grafana Labs.',
+    what: 'Measuring your running system all the time, numbers like requests per second, latency, errors and CPU, and showing them as graphs over time.',
+    does: 'Each server exposes a /metrics page with counters and timings. Prometheus visits (“scrapes”) every server every few seconds and stores the numbers. Grafana draws dashboards from Prometheus and can alert you when something crosses a limit.',
+    example: 'The dashboard of a car: speed, fuel, engine temperature. You don’t open the bonnet every few minutes; you glance at the gauges, and a warning light tells you when to stop.',
+    why: 'Without metrics, “the site is slow” is a guess. With them you see which route, which server and which minute it started, before users complain. Every scaling decision (more servers, a cache, a bigger database) should be based on what the graphs show.',
+    related: ['p95', 'rps', 'errorrate', 'utilization', 'bottleneck'],
+    match: ['prometheus', 'grafana', 'monitoring', 'dashboards'],
+  },
+  iac: {
+    title: 'Infrastructure as code (Terraform, OpenTofu)',
+    aka: 'IaC · Terraform · OpenTofu · HCL · plan / apply · state',
+    origin: 'The idea grew in the late 2000s with tools like Puppet and Chef. Terraform was released by HashiCorp in 2014 with its own language, HCL. In 2023 HashiCorp changed Terraform’s licence, and the community forked it as OpenTofu under the Linux Foundation; both use the same language.',
+    what: 'Describing servers, networks, databases and load balancers in text files instead of creating them by hand, then letting a tool make reality match the files.',
+    does: 'You write what you want (“3 app servers, one database”). plan compares that with what exists and lists the changes; apply makes them. A state file remembers what the tool created, so it can update or destroy exactly that later.',
+    example: 'A recipe instead of cooking from memory. Anyone can follow it and get the same dish, you can double the quantities by changing one number, and if something is missing from the kitchen the recipe tells you what to add.',
+    why: 'Infrastructure built by hand cannot be reviewed, repeated or rebuilt after a disaster. As code it lives in Git: changes are reviewed in pull requests, a new environment is one command, and scaling is changing app_replicas = 3 to 5. Terraform and OpenTofu are interchangeable for learning; choose OpenTofu for a fully open-source licence, Terraform if your company already uses it.',
+    related: ['horizontal', 'spof', 'availability', 'autoscale'],
+    match: ['terraform', 'opentofu', 'infrastructure as code'],
+  },
   bottleneck: {
     title: 'Bottleneck',
     aka: 'constraint · breaking point · limiting factor',
@@ -590,7 +612,7 @@ export const GLOSSARY_ORDER = [
   'server', 'cpu', 'ram', 'vertical', 'horizontal', 'rps', 'latency', 'p95', 'utilization', 'bottleneck', 'errorrate',
   'api', 'dns', 'cdn', 'static', 'gateway', 'ratelimit', 'bot', 'proxy', 'forward-proxy', 'reverse-proxy', 'lb', 'roundrobin', 'session', 'session-memory', 'sticky', 'session-shared', 'state', 'stateless', 'stateful', 'healthcheck',
   'autoscale', 'cache', 'hitrate', 'workingset', 'database', 'readwrite', 'replica', 'shard', 'pool', 'queue', 'worker', 'idempotency',
-  'backlog', 'backpressure', 'breaker', 'cascade', 'availability', 'spof', 'region',
+  'backlog', 'backpressure', 'breaker', 'cascade', 'availability', 'spof', 'region', 'monitoring', 'iac',
 ];
 
 export function termsIn(text) {

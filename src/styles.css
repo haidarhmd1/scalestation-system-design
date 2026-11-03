@@ -639,3 +639,15 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
   .lang-card { padding: 10px; }
   .tabs button { padding: 7px 9px; }
 }
+
+/* framework toggle inside the Node.js card, IaC tool picker */
+.lang-cards { grid-template-columns: repeat(3, minmax(0, 240px)); }
+.lang-card[role="button"] { cursor: pointer; }
+.fw-pick { display: flex; gap: 2px; margin-top: 8px; padding: 2px; background: var(--bg2); border: 1px solid var(--border); border-radius: 7px; width: 100%; }
+.fw-pick button { flex: 1; border: 0; background: none; color: var(--dim); padding: 4px 6px; border-radius: 5px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.fw-pick button.on { background: #123323; color: #a6f5c9; box-shadow: inset 0 0 0 1px #1f6b44; }
+.lang-card:not(.on) .fw-pick button.on { background: var(--panel2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border2); }
+.iac-pick { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border2); border-radius: 9px; background: var(--bg2); }
+.iac-pick .seg { max-width: 280px; margin: 6px 0 6px; }
+.iac-pick p { margin: 0; }
+@media (max-width: 600px) { .lang-cards { grid-template-columns: 1fr; } }
