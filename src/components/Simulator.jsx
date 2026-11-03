@@ -4,6 +4,7 @@ import SimMap, { STATUS_COLOR } from './SimMap.jsx';
 import { Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.jsx';
 import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js';
 import { Info } from './Glossary.jsx';
+import Methodology from './Methodology.jsx';
 
 const TICK_MS = 250;
 const SPEEDS = [{ value: 2, label: '1×' }, { value: 10, label: '5×' }, { value: 40, label: '20×' }];
@@ -36,6 +37,8 @@ export default function Simulator({ preset }) {
   const [bp, setBp] = useState(null);
   const [fs, setFs] = useState(false);
   const [fsInsp, setFsInsp] = useState(true);
+  const [meth, setMeth] = useState(null);
+  const closeMeth = useCallback(() => setMeth(null), []);
 
   // Full screen: the whole page goes full screen (so glossary pop-ups still show)
   // and the map panel covers the viewport via CSS.
@@ -194,12 +197,13 @@ export default function Simulator({ preset }) {
         </div>
         <div className="kpis">
           <Kpi label="Users online" value={fmt(r.users)} />
-          <Kpi label="Offered" info="rps" value={`${fmt(r.raw)}/s`} />
-          <Kpi label="Served OK" info="rps" value={`${fmt(r.served)}/s`} />
-          <Kpi label="Errors" info="errorrate" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} />
-          <Kpi label="p95 latency" info="p95" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} />
-          <Kpi label="Uptime est." info="availability" value={`${(r.avail * 100).toFixed(r.avail > 0.9999 ? 3 : 2)}%`} />
-          <Kpi label="Cost / month" value={`$${fmt(r.costHr * 730)}`} />
+          <Kpi label="Offered" info="rps" value={`${fmt(r.raw)}/s`} onClick={() => setMeth('stats')} />
+          <Kpi label="Served OK" info="rps" value={`${fmt(r.served)}/s`} onClick={() => setMeth('stats')} />
+          <Kpi label="Errors" info="errorrate" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} onClick={() => setMeth('stats')} />
+          <Kpi label="p95 latency" info="p95" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} onClick={() => setMeth('stats')} />
+          <Kpi label="Uptime est." info="availability" value={`${(r.avail * 100).toFixed(r.avail > 0.9999 ? 3 : 2)}%`} onClick={() => setMeth('stats')} />
+          <Kpi label="Cost / month" value={`$${fmt(r.costHr * 730)}`} onClick={() => setMeth('cost')} hint="See breakdown" />
+          <button className="btn small how-btn" onClick={() => setMeth('stats')}><span className="info static">?</span>How is this calculated?</button>
         </div>
       </div>
 
@@ -270,7 +274,7 @@ export default function Simulator({ preset }) {
                 <Kpi label="Served OK" info="rps" value={`${fmt(r.served)}/s`} />
                 <Kpi label="Errors" info="errorrate" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} />
                 <Kpi label="p95" info="p95" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} />
-                <Kpi label="Cost / mo" value={`$${fmt(r.costHr * 730)}`} />
+                <Kpi label="Cost / mo" value={`$${fmt(r.costHr * 730)}`} onClick={() => setMeth('cost')} hint="See breakdown" />
               </div>
             </div>
           )}
@@ -298,6 +302,8 @@ export default function Simulator({ preset }) {
           <Inspector id={selected} cfg={cfg} r={r} update={update} sim={sim} />
         </aside>
       </div>
+
+      {meth && <Methodology r={r} cfg={cfg} tab={meth} onClose={closeMeth} />}
 
       <div className="sim-bottom">
         <section className="panel advisor">
@@ -345,11 +351,12 @@ export default function Simulator({ preset }) {
   );
 }
 
-function Kpi({ label, value, tone, info }) {
+function Kpi({ label, value, tone, info, onClick, hint }) {
   return (
-    <div className={`kpi ${tone || ''}`}>
+    <div className={`kpi ${tone || ''} ${onClick ? 'clickable' : ''}`} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+      title={onClick ? 'How is this calculated?' : undefined} onKeyDown={(e) => onClick && (e.key === 'Enter' || e.key === ' ') && onClick()}>
       <span className="kpi-l mono">{label}{info && <Info term={info} label={label} />}</span>
-      <span className="kpi-v mono">{value}</span>
+      <span className="kpi-v mono">{value}{hint && <span className="kpi-hint"> ⓘ</span>}</span>
     </div>
   );
 }
