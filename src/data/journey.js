@@ -3,13 +3,14 @@
 // Files tagged lang 'any' are shared; others show only for that language.
 
 export const LANGS = [
-  { id: 'node', label: 'Node.js', sub: 'Express 5', ext: 'js' },
+  { id: 'express', label: 'Node.js', sub: 'TypeScript · Express 5', ext: 'ts', group: 'node', framework: 'Express 5' },
+  { id: 'fastify', label: 'Node.js', sub: 'TypeScript · Fastify 5', ext: 'ts', group: 'node', framework: 'Fastify 5' },
   { id: 'python', label: 'Python', sub: 'FastAPI', ext: 'py' },
   { id: 'go', label: 'Go', sub: 'net/http · Go 1.25+', ext: 'go' },
 ];
 
 // ── Docker Compose file, grown station by station ────────────────────────
-function compose({ proxy = false, redis = false, worker = null } = {}) {
+function compose({ proxy = false, redis = false, worker = null, observability = false } = {}) {
   const env = [
     '    environment:',
     '      DATABASE_URL: postgres://postgres:dev@db:5432/shop',
@@ -55,10 +56,33 @@ function compose({ proxy = false, redis = false, worker = null } = {}) {
     '      retries: 15',
   );
   if (redis) out.push('', '  redis:', '    image: redis:7');
+  if (observability) {
+    out.push(
+      '',
+      '  prometheus:            # collects metrics from every app replica',
+      '    image: prom/prometheus:latest',
+      '    ports:',
+      '      - "9090:9090"',
+      '    volumes:',
+      '      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro',
+      '',
+      '  grafana:               # dashboards on http://localhost:3001',
+      '    image: grafana/grafana:latest',
+      '    ports:',
+      '      - "3001:3000"',
+      '    environment:          # local learning setup only: no login',
+      '      GF_AUTH_ANONYMOUS_ENABLED: "true"',
+      '      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin',
+      '      GF_AUTH_DISABLE_LOGIN_FORM: "true"',
+      '    volumes:',
+      '      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro',
+      '      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro',
+      '    depends_on:',
+      '      - prometheus',
+    );
+  }
   return out.join('\n') + '\n';
 }
-
-const WORKER_CMD = { node: '["node", "worker.js"]', python: '["python", "worker.py"]', go: '["worker"]' };
 
 const NGINX_BASIC = `events {}
 
@@ -170,240 +194,378 @@ export default function () {
 }
 `;
 
-// ── Node.js versions of the app ──────────────────────────────────────────
-const NODE = {
-  s1: `const express = require('express');
-const os = require('os');
+// ── Node.js + TypeScript versions of the app ─────────────────────────────
+// Node 22.18+ / 24 runs .ts files directly ("type stripping"), so there is
+// no build step: `node server.ts`. `npm run typecheck` checks the types.
+
+const TS_DB = `// Connection pool: reuse at most 10 open connections to Postgres.
+const db = new pg.Pool({
+  connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:dev@localhost:5432/shop',
+  max: 10,
+});`;
+
+const TS_REDIS = `const redis = createClient({ url: process.env.REDIS_URL ?? 'redis://localhost:6379' });
+redis.on('error', (err) => console.error('redis error', err));
+await redis.connect();`;
+
+const TS_METRICS_DEF = `// Prometheus metrics: how long each request took, by method, route and status.
+client.collectDefaultMetrics();
+const httpDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'route', 'status'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+});`;
+
+const EXPRESS = {};
+EXPRESS.s1 = `import express from 'express';
+import os from 'node:os';
 
 const app = express();
 
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.json({ hello: 'world', server: os.hostname() });
 });
 
 app.listen(3000, () => console.log('listening on http://localhost:3000'));
-`,
-  s2: `const express = require('express');
-const os = require('os');
-const { Pool } = require('pg');
+`;
+
+EXPRESS.s2 = `import express from 'express';
+import os from 'node:os';
+import pg from 'pg';
+
+type Product = { id: number; name: string; price_cents: number };
 
 const app = express();
 
-// Connection pool: reuse at most 10 open connections to Postgres.
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://postgres:dev@localhost:5432/shop',
-  max: 10,
+${TS_DB}
+
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
 });
 
-app.get('/health', (req, res) => res.json({ ok: true }));
-
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.json({ hello: 'world', server: os.hostname() });
 });
 
 app.get('/products/:id', async (req, res) => {
-  const { rows } = await db.query(
+  const { rows } = await db.query<Product>(
     'SELECT id, name, price_cents FROM products WHERE id = $1',
     [req.params.id],
   );
-  if (rows.length === 0) return res.status(404).json({ error: 'not found' });
+  if (rows.length === 0) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
   res.json({ ...rows[0], server: os.hostname() });
 });
 
 app.listen(3000, () => console.log('listening on http://localhost:3000'));
-`,
-  s5bug: `// Add to server.js, above app.listen(...).
+`;
+
+EXPRESS.s5bug = `// Add to server.ts, above app.listen(...).
 // STATEFUL on purpose: each server keeps its own counter in memory.
-const visitsInMemory = new Map();
+const visitsInMemory = new Map<string, number>();
 
 app.get('/visit/:user', (req, res) => {
-  const visits = (visitsInMemory.get(req.params.user) || 0) + 1;
+  const visits = (visitsInMemory.get(req.params.user) ?? 0) + 1;
   visitsInMemory.set(req.params.user, visits);
   res.json({ user: req.params.user, visits, server: os.hostname() });
 });
-`,
-  s5: `const express = require('express');
-const os = require('os');
-const { Pool } = require('pg');
-const { createClient } = require('redis');
+`;
 
-const app = express();
-
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://postgres:dev@localhost:5432/shop',
-  max: 10,
-});
-
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-redis.on('error', (err) => console.error('redis error', err));
-redis.connect();
-
-app.get('/health', (req, res) => res.json({ ok: true }));
-
-app.get('/', (req, res) => {
-  res.json({ hello: 'world', server: os.hostname() });
-});
-
-app.get('/products/:id', async (req, res) => {
-  const { rows } = await db.query(
-    'SELECT id, name, price_cents FROM products WHERE id = $1',
-    [req.params.id],
-  );
-  if (rows.length === 0) return res.status(404).json({ error: 'not found' });
-  res.json({ ...rows[0], server: os.hostname() });
-});
-
-// STATELESS: the counter lives in Redis, shared by every server.
+const EXPRESS_VISIT = `// STATELESS: the counter lives in Redis, shared by every server.
 app.get('/visit/:user', async (req, res) => {
   const visits = await redis.incr('visits:' + req.params.user);
   res.json({ user: req.params.user, visits, server: os.hostname() });
-});
+});`;
 
-app.listen(3000, () => console.log('listening on http://localhost:3000'));
-`,
-  s6: `const express = require('express');
-const os = require('os');
-const { Pool } = require('pg');
-const { createClient } = require('redis');
+const EXPRESS_PRODUCT_PLAIN = `app.get('/products/:id', async (req, res) => {
+  const { rows } = await db.query<Product>(
+    'SELECT id, name, price_cents FROM products WHERE id = $1',
+    [req.params.id],
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+  res.json({ ...rows[0], server: os.hostname() });
+});`;
 
-const app = express();
-
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://postgres:dev@localhost:5432/shop',
-  max: 10,
-});
-
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-redis.on('error', (err) => console.error('redis error', err));
-redis.connect();
-
-app.get('/health', (req, res) => res.json({ ok: true }));
-
-app.get('/', (req, res) => {
-  res.json({ hello: 'world', server: os.hostname() });
-});
-
-// Cache-aside: 1) look in Redis  2) on a miss ask Postgres  3) remember it.
+const EXPRESS_PRODUCT_CACHED = `// Cache-aside: 1) look in Redis  2) on a miss ask Postgres  3) remember it.
 app.get('/products/:id', async (req, res) => {
   const key = 'product:' + req.params.id;
 
   const cached = await redis.get(key);
-  if (cached) return res.json({ ...JSON.parse(cached), cache: 'hit', server: os.hostname() });
+  if (cached) {
+    res.json({ ...JSON.parse(cached), cache: 'hit', server: os.hostname() });
+    return;
+  }
 
-  const { rows } = await db.query(
+  const { rows } = await db.query<Product>(
     'SELECT id, name, price_cents FROM products WHERE id = $1',
     [req.params.id],
   );
-  if (rows.length === 0) return res.status(404).json({ error: 'not found' });
+  if (rows.length === 0) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
 
   await redis.set(key, JSON.stringify(rows[0]), { EX: 60 }); // expires after 60 s
   res.json({ ...rows[0], cache: 'miss', server: os.hostname() });
+});`;
+
+const EXPRESS_ORDERS = `// Accept the order instantly and let a worker save it later.
+app.post('/orders', async (req, res) => {
+  const productId = Number(req.body?.product_id);
+  if (!productId) {
+    res.status(400).json({ error: 'product_id is required' });
+    return;
+  }
+  const order = { id: randomUUID(), product_id: productId, qty: Number(req.body.qty ?? 1) };
+  await redis.lPush('queue:orders', JSON.stringify(order));
+  res.status(202).json({ accepted: order.id });
+});`;
+
+const EXPRESS_BASE_ROUTES = `app.get('/health', (_req, res) => {
+  res.json({ ok: true });
 });
 
-app.get('/visit/:user', async (req, res) => {
-  const visits = await redis.incr('visits:' + req.params.user);
-  res.json({ user: req.params.user, visits, server: os.hostname() });
-});
+app.get('/', (_req, res) => {
+  res.json({ hello: 'world', server: os.hostname() });
+});`;
 
-app.listen(3000, () => console.log('listening on http://localhost:3000'));
-`,
-  s7: `const express = require('express');
-const os = require('os');
-const crypto = require('crypto');
-const { Pool } = require('pg');
-const { createClient } = require('redis');
+const expressApp = ({ cache = false, orders = false, metrics = false }) => `import express from 'express';
+import os from 'node:os';
+${orders ? "import { randomUUID } from 'node:crypto';\n" : ''}import pg from 'pg';
+${metrics ? "import client from 'prom-client';\n" : ''}import { createClient } from 'redis';
+
+type Product = { id: number; name: string; price_cents: number };
 
 const app = express();
-app.use(express.json());
+${orders ? 'app.use(express.json());\n' : ''}
+${TS_DB}
 
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://postgres:dev@localhost:5432/shop',
-  max: 10,
+${TS_REDIS}
+${metrics ? `
+${TS_METRICS_DEF}
+
+// Measure every request once its response has been sent.
+app.use((req, res, next) => {
+  const stop = httpDuration.startTimer();
+  res.on('finish', () => {
+    stop({ method: req.method, route: req.route?.path ?? 'unmatched', status: String(res.statusCode) });
+  });
+  next();
 });
 
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-redis.on('error', (err) => console.error('redis error', err));
-redis.connect();
-
-app.get('/health', (req, res) => res.json({ ok: true }));
-
-app.get('/', (req, res) => {
-  res.json({ hello: 'world', server: os.hostname() });
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.send(await client.register.metrics());
 });
+` : ''}
+${EXPRESS_BASE_ROUTES}
 
-app.get('/products/:id', async (req, res) => {
-  const key = 'product:' + req.params.id;
+${cache ? EXPRESS_PRODUCT_CACHED : EXPRESS_PRODUCT_PLAIN}
 
-  const cached = await redis.get(key);
-  if (cached) return res.json({ ...JSON.parse(cached), cache: 'hit', server: os.hostname() });
+${EXPRESS_VISIT}
+${orders ? `\n${EXPRESS_ORDERS}\n` : ''}
+app.listen(3000, () => console.log('listening on http://localhost:3000'));
+`;
 
-  const { rows } = await db.query(
+EXPRESS.s5 = expressApp({});
+EXPRESS.s6 = expressApp({ cache: true });
+EXPRESS.s7 = expressApp({ cache: true, orders: true });
+EXPRESS.s8 = expressApp({ cache: true, orders: true, metrics: true });
+
+const FASTIFY = {};
+FASTIFY.s1 = `import Fastify from 'fastify';
+import os from 'node:os';
+
+const app = Fastify();
+
+app.get('/health', async () => ({ ok: true }));
+
+app.get('/', async () => ({ hello: 'world', server: os.hostname() }));
+
+await app.listen({ port: 3000, host: '0.0.0.0' });
+console.log('listening on http://localhost:3000');
+`;
+
+const FASTIFY_BASE_ROUTES = `app.get('/health', async () => ({ ok: true }));
+
+app.get('/', async () => ({ hello: 'world', server: os.hostname() }));`;
+
+const FASTIFY_PRODUCT_PLAIN = `app.get<{ Params: { id: string } }>('/products/:id', async (req, reply) => {
+  const { rows } = await db.query<Product>(
     'SELECT id, name, price_cents FROM products WHERE id = $1',
     [req.params.id],
   );
-  if (rows.length === 0) return res.status(404).json({ error: 'not found' });
+  if (rows.length === 0) return reply.code(404).send({ error: 'not found' });
+  return { ...rows[0], server: os.hostname() };
+});`;
 
-  await redis.set(key, JSON.stringify(rows[0]), { EX: 60 });
-  res.json({ ...rows[0], cache: 'miss', server: os.hostname() });
-});
+const FASTIFY_PRODUCT_CACHED = `// Cache-aside: 1) look in Redis  2) on a miss ask Postgres  3) remember it.
+app.get<{ Params: { id: string } }>('/products/:id', async (req, reply) => {
+  const key = 'product:' + req.params.id;
 
-app.get('/visit/:user', async (req, res) => {
+  const cached = await redis.get(key);
+  if (cached) return { ...JSON.parse(cached), cache: 'hit', server: os.hostname() };
+
+  const { rows } = await db.query<Product>(
+    'SELECT id, name, price_cents FROM products WHERE id = $1',
+    [req.params.id],
+  );
+  if (rows.length === 0) return reply.code(404).send({ error: 'not found' });
+
+  await redis.set(key, JSON.stringify(rows[0]), { EX: 60 }); // expires after 60 s
+  return { ...rows[0], cache: 'miss', server: os.hostname() };
+});`;
+
+const FASTIFY_VISIT = `// STATELESS: the counter lives in Redis, shared by every server.
+app.get<{ Params: { user: string } }>('/visit/:user', async (req) => {
   const visits = await redis.incr('visits:' + req.params.user);
-  res.json({ user: req.params.user, visits, server: os.hostname() });
-});
+  return { user: req.params.user, visits, server: os.hostname() };
+});`;
 
-// Accept the order instantly and let a worker save it later.
-app.post('/orders', async (req, res) => {
-  const order = {
-    id: crypto.randomUUID(),
-    product_id: Number(req.body.product_id),
-    qty: Number(req.body.qty || 1),
-  };
-  if (!order.product_id) return res.status(400).json({ error: 'product_id is required' });
+const FASTIFY_ORDERS = `// Accept the order instantly and let a worker save it later.
+app.post<{ Body: { product_id?: number; qty?: number } }>('/orders', async (req, reply) => {
+  const productId = Number(req.body?.product_id);
+  if (!productId) return reply.code(400).send({ error: 'product_id is required' });
 
+  const order = { id: randomUUID(), product_id: productId, qty: Number(req.body.qty ?? 1) };
   await redis.lPush('queue:orders', JSON.stringify(order));
-  res.status(202).json({ accepted: order.id });
+  return reply.code(202).send({ accepted: order.id });
+});`;
+
+FASTIFY.s2 = `import Fastify from 'fastify';
+import os from 'node:os';
+import pg from 'pg';
+
+type Product = { id: number; name: string; price_cents: number };
+
+const app = Fastify();
+
+${TS_DB}
+
+${FASTIFY_BASE_ROUTES}
+
+${FASTIFY_PRODUCT_PLAIN}
+
+await app.listen({ port: 3000, host: '0.0.0.0' });
+console.log('listening on http://localhost:3000');
+`;
+
+FASTIFY.s5bug = `// Add to server.ts, above await app.listen(...).
+// STATEFUL on purpose: each server keeps its own counter in memory.
+const visitsInMemory = new Map<string, number>();
+
+app.get<{ Params: { user: string } }>('/visit/:user', async (req) => {
+  const visits = (visitsInMemory.get(req.params.user) ?? 0) + 1;
+  visitsInMemory.set(req.params.user, visits);
+  return { user: req.params.user, visits, server: os.hostname() };
+});
+`;
+
+const fastifyApp = ({ cache = false, orders = false, metrics = false }) => `import Fastify from 'fastify';
+import os from 'node:os';
+${orders ? "import { randomUUID } from 'node:crypto';\n" : ''}import pg from 'pg';
+${metrics ? "import client from 'prom-client';\n" : ''}import { createClient } from 'redis';
+
+type Product = { id: number; name: string; price_cents: number };
+
+const app = Fastify();
+
+${TS_DB}
+
+${TS_REDIS}
+${metrics ? `
+${TS_METRICS_DEF}
+
+// Measure every request once its response has been sent.
+app.addHook('onResponse', async (req, reply) => {
+  httpDuration.observe(
+    { method: req.method, route: req.routeOptions.url ?? 'unmatched', status: String(reply.statusCode) },
+    reply.elapsedTime / 1000,
+  );
 });
 
-app.listen(3000, () => console.log('listening on http://localhost:3000'));
-`,
-  worker: `const { Pool } = require('pg');
-const { createClient } = require('redis');
+app.get('/metrics', async (_req, reply) => {
+  reply.header('Content-Type', client.register.contentType);
+  return client.register.metrics();
+});
+` : ''}
+${FASTIFY_BASE_ROUTES}
 
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://postgres:dev@localhost:5432/shop',
+${cache ? FASTIFY_PRODUCT_CACHED : FASTIFY_PRODUCT_PLAIN}
+
+${FASTIFY_VISIT}
+${orders ? `\n${FASTIFY_ORDERS}\n` : ''}
+await app.listen({ port: 3000, host: '0.0.0.0' });
+console.log('listening on http://localhost:3000');
+`;
+
+FASTIFY.s5 = fastifyApp({});
+FASTIFY.s6 = fastifyApp({ cache: true });
+FASTIFY.s7 = fastifyApp({ cache: true, orders: true });
+FASTIFY.s8 = fastifyApp({ cache: true, orders: true, metrics: true });
+
+const TS = {
+  worker: `import pg from 'pg';
+import { createClient } from 'redis';
+
+type Order = { id: string; product_id: number; qty: number };
+
+const db = new pg.Pool({
+  connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:dev@localhost:5432/shop',
   max: 2,
 });
 
-async function main() {
-  const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-  await redis.connect();
-  console.log('worker waiting for jobs');
+const redis = createClient({ url: process.env.REDIS_URL ?? 'redis://localhost:6379' });
+redis.on('error', (err) => console.error('redis error', err));
+await redis.connect();
+console.log('worker waiting for jobs');
 
-  while (true) {
-    const job = await redis.brPop('queue:orders', 0); // waits until a job arrives
-    const order = JSON.parse(job.element);
+while (true) {
+  const job = await redis.brPop('queue:orders', 0); // waits until a job arrives
+  if (!job) continue;
+  const order = JSON.parse(job.element) as Order;
 
-    // ON CONFLICT DO NOTHING makes this idempotent: a repeated job is harmless.
-    await db.query(
-      'INSERT INTO orders (id, product_id, qty) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
-      [order.id, order.product_id, order.qty],
-    );
-    console.log('saved order', order.id);
+  // ON CONFLICT DO NOTHING makes this idempotent: a repeated job is harmless.
+  await db.query(
+    'INSERT INTO orders (id, product_id, qty) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
+    [order.id, order.product_id, order.qty],
+  );
+  console.log('saved order', order.id);
+}
+`,
+  tsconfig: `{
+  // Type-check only: Node runs the .ts files directly (type stripping).
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["node"]
   }
 }
-
-main();
 `,
-  dockerfile: `FROM node:22-alpine
+  dockerfile: `FROM node:24-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
 EXPOSE 3000
-CMD ["node", "server.js"]
+# Node 24 runs TypeScript directly: no build step needed.
+CMD ["node", "server.ts"]
 `,
 };
 
@@ -998,11 +1160,332 @@ ENTRYPOINT ["/server"]
 `,
 };
 
-const APP_FILE = { node: 'app/server.js', python: 'app/main.py', go: 'app/main.go' };
-const appFiles = (versions, note) => [
-  { path: APP_FILE.node, lang: 'node', code: NODE[versions], note },
-  { path: APP_FILE.python, lang: 'python', code: PY[versions], note },
-  { path: APP_FILE.go, lang: 'go', code: GO[versions], note },
+// ── Metrics-enabled versions (station "See inside") ──────────────────────
+PY.s8 = PY.s7
+  .replace('import socket\n', 'import socket\nimport time\n')
+  .replace('from fastapi import FastAPI, HTTPException\n', 'from fastapi import FastAPI, HTTPException, Request, Response\n')
+  .replace('from pydantic import BaseModel\n', 'from prometheus_client import CONTENT_TYPE_LATEST, Histogram, generate_latest\nfrom pydantic import BaseModel\n')
+  .replace('HOST = socket.gethostname()\n', `HOST = socket.gethostname()
+
+# Prometheus metrics: how long each request took, by method, route and status.
+REQUEST_SECONDS = Histogram(
+    "http_request_duration_seconds", "HTTP request duration in seconds", ["method", "route", "status"]
+)
+
+
+@app.middleware("http")
+async def measure(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    route = getattr(request.scope.get("route"), "path", "unmatched")
+    REQUEST_SECONDS.labels(request.method, route, str(response.status_code)).observe(time.perf_counter() - start)
+    return response
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+`);
+
+PY.requirements8 = `fastapi
+uvicorn[standard]
+psycopg[binary,pool]
+redis
+prometheus_client
+`;
+
+GO.s8 = GO.s7
+  .replace('\t"github.com/redis/go-redis/v9"\n', '\t"github.com/prometheus/client_golang/prometheus"\n\t"github.com/prometheus/client_golang/prometheus/promhttp"\n\t"github.com/redis/go-redis/v9"\n')
+  .replace('func main() {', `// Prometheus metrics: how long each request took, by method, route and status.
+var httpDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	Name:    "http_request_duration_seconds",
+	Help:    "HTTP request duration in seconds",
+	Buckets: prometheus.DefBuckets,
+}, []string{"method", "route", "status"})
+
+func init() { prometheus.MustRegister(httpDuration) }
+
+// statusRecorder remembers the status code a handler wrote.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// instrument wraps the router and measures every request.
+func instrument(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: 200}
+		next.ServeHTTP(rec, r)
+		route := r.Pattern // e.g. "GET /products/{id}", set by the router
+		if route == "" {
+			route = "unmatched"
+		}
+		httpDuration.WithLabelValues(r.Method, route, strconv.Itoa(rec.status)).Observe(time.Since(start).Seconds())
+	})
+}
+
+func main() {`)
+  .replace('\tlog.Println("listening on http://localhost:3000")\n\tlog.Fatal(http.ListenAndServe(":3000", nil))', '\thttp.Handle("GET /metrics", promhttp.Handler())\n\n\tlog.Println("listening on http://localhost:3000")\n\tlog.Fatal(http.ListenAndServe(":3000", instrument(http.DefaultServeMux)))');
+
+// ── Prometheus + Grafana files ───────────────────────────────────────────
+const PROMETHEUS_YML = `global:
+  scrape_interval: 5s          # collect metrics every 5 seconds
+
+scrape_configs:
+  - job_name: app
+    # Docker's DNS returns one address per app replica,
+    # so Prometheus scrapes every server automatically.
+    dns_sd_configs:
+      - names: ['app']
+        type: A
+        port: 3000
+`;
+
+const GRAFANA_DATASOURCE = `apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+`;
+
+const GRAFANA_PROVIDER = `apiVersion: 1
+providers:
+  - name: my-system
+    folder: My system
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+`;
+
+const panel = (id, title, x, y, expr, legend, unit) => ({
+  id, type: 'timeseries', title,
+  gridPos: { x, y, w: 12, h: 8 },
+  datasource: { type: 'prometheus', uid: 'prometheus' },
+  fieldConfig: { defaults: { unit }, overrides: [] },
+  targets: [{ refId: 'A', expr, legendFormat: legend }],
+});
+
+const GRAFANA_DASHBOARD = JSON.stringify({
+  uid: 'my-system',
+  title: 'My system',
+  schemaVersion: 39,
+  refresh: '5s',
+  time: { from: 'now-15m', to: 'now' },
+  panels: [
+    panel(1, 'Requests per second by route', 0, 0, 'sum by (route) (rate(http_request_duration_seconds_count[1m]))', '{{route}}', 'reqps'),
+    panel(2, 'p95 latency', 12, 0, 'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[1m])))', 'p95', 's'),
+    panel(3, 'Requests per second by server', 0, 8, 'sum by (instance) (rate(http_request_duration_seconds_count[1m]))', '{{instance}}', 'reqps'),
+    panel(4, 'Error responses per second (4xx / 5xx)', 12, 8, 'sum by (status) (rate(http_request_duration_seconds_count{status=~"4..|5.."}[1m]))', '{{status}}', 'reqps'),
+  ],
+}, null, 2) + '\n';
+
+// ── Terraform / OpenTofu files ({{tf}} becomes terraform or tofu) ────────
+const IAC_MAIN = `# The same system as docker-compose.yml, described as code.
+# Works with Terraform and OpenTofu: the language (HCL) is the same.
+
+terraform {
+  required_providers {
+    docker = {
+      source  = "kreuzwerker/docker"   # manages containers on your local Docker
+      version = "~> 3.0"
+    }
+  }
+}
+
+provider "docker" {}
+
+# ── Inputs you can change without touching the rest ──
+variable "app_replicas" {
+  description = "How many app servers to run behind NGINX"
+  type        = number
+  default     = 3
+}
+
+variable "worker_command" {
+  description = "Command that starts the queue worker"
+  type        = list(string)
+}
+
+variable "db_password" {
+  type      = string
+  default   = "dev"
+  sensitive = true
+}
+
+variable "public_port" {
+  type    = number
+  default = 8081
+}
+
+locals {
+  app_dir = abspath("\${path.module}/../app")
+  env = [
+    "DATABASE_URL=postgres://postgres:\${var.db_password}@iac-db:5432/shop",
+    "REDIS_URL=redis://iac-redis:6379",
+  ]
+}
+
+resource "docker_network" "shop" {
+  name = "shop-iac"
+}
+
+# ── Images ──
+resource "docker_image" "app" {
+  name = "my-system-app:iac"
+  build {
+    context = local.app_dir
+  }
+  # Rebuild when any source file in app/ changes.
+  triggers = {
+    code = sha1(join("", [for f in fileset(local.app_dir, "*.{ts,js,py,go,json,mod,sum,txt}") : filesha1("\${local.app_dir}/\${f}")]))
+  }
+}
+
+resource "docker_image" "postgres" {
+  name         = "postgres:16"
+  keep_locally = true
+}
+
+resource "docker_image" "redis" {
+  name         = "redis:7"
+  keep_locally = true
+}
+
+resource "docker_image" "nginx" {
+  name         = "nginx:1.27"
+  keep_locally = true
+}
+
+# ── Database and Redis ──
+resource "docker_container" "db" {
+  name  = "iac-db"
+  image = docker_image.postgres.image_id
+  env   = ["POSTGRES_PASSWORD=\${var.db_password}", "POSTGRES_DB=shop"]
+
+  networks_advanced {
+    name = docker_network.shop.name
+  }
+  volumes {
+    host_path      = abspath("\${path.module}/../schema.sql")
+    container_path = "/docker-entrypoint-initdb.d/01-schema.sql"
+    read_only      = true
+  }
+  volumes {
+    host_path      = abspath("\${path.module}/../schema-orders.sql")
+    container_path = "/docker-entrypoint-initdb.d/02-orders.sql"
+    read_only      = true
+  }
+  healthcheck {
+    test     = ["CMD-SHELL", "pg_isready -U postgres"]
+    interval = "2s"
+    retries  = 15
+  }
+  wait = true   # apply waits until the healthcheck passes
+}
+
+resource "docker_container" "redis" {
+  name  = "iac-redis"
+  image = docker_image.redis.image_id
+  networks_advanced {
+    name = docker_network.shop.name
+  }
+}
+
+# ── App servers: count = var.app_replicas ──
+resource "docker_container" "app" {
+  count = var.app_replicas
+  name  = "iac-app-\${count.index}"
+  image = docker_image.app.image_id
+  env   = local.env
+
+  networks_advanced {
+    name = docker_network.shop.name
+  }
+  depends_on = [docker_container.db, docker_container.redis]
+}
+
+resource "docker_container" "worker" {
+  name    = "iac-worker"
+  image   = docker_image.app.image_id
+  command = var.worker_command
+  env     = local.env
+
+  networks_advanced {
+    name = docker_network.shop.name
+  }
+  depends_on = [docker_container.db, docker_container.redis]
+}
+
+# ── NGINX, configured from a template that lists every app server ──
+resource "docker_container" "nginx" {
+  name  = "iac-nginx"
+  image = docker_image.nginx.image_id
+
+  ports {
+    internal = 80
+    external = var.public_port
+  }
+  networks_advanced {
+    name = docker_network.shop.name
+  }
+  upload {
+    file    = "/etc/nginx/nginx.conf"
+    content = templatefile("\${path.module}/nginx.conf.tftpl", { servers = docker_container.app[*].name })
+  }
+}
+
+output "url" {
+  value = "http://localhost:\${var.public_port}"
+}
+
+output "app_servers" {
+  value = docker_container.app[*].name
+}
+`;
+
+const IAC_NGINX_TPL = `events {}
+
+http {
+  upstream app_servers {
+%{ for s in servers ~}
+    server \${s}:3000 max_fails=3 fail_timeout=10s;
+%{ endfor ~}
+  }
+
+  server {
+    listen 80;
+    location / {
+      proxy_pass http://app_servers;
+      proxy_set_header Host $host;
+    }
+  }
+}
+`;
+
+const tfvars = (cmd) => `# Values for the variables in main.tf
+app_replicas   = 3
+worker_command = ${cmd}
+`;
+
+// ── Which file belongs to which language ─────────────────────────────────
+const APP_FILE = { express: 'app/server.ts', fastify: 'app/server.ts', python: 'app/main.py', go: 'app/main.go' };
+const CODE = { express: EXPRESS, fastify: FASTIFY, python: PY, go: GO };
+const appFiles = (version, note) => Object.keys(APP_FILE).map((lang) => ({ path: APP_FILE[lang], lang, code: CODE[lang][version], note }));
+const bugFiles = () => Object.keys(APP_FILE).map((lang) => ({ path: APP_FILE[lang], lang, code: CODE[lang].s5bug, note: 'step 1: the stateful version (the bug)', tag: 'bug' }));
+const WORKER_CMD = { ts: '["node", "worker.ts"]', python: '["python", "worker.py"]', go: '["worker"]' };
+const perLangCompose = (opts) => [
+  { path: 'docker-compose.yml', lang: 'ts', code: compose({ ...opts, worker: opts.worker && WORKER_CMD.ts }) },
+  { path: 'docker-compose.yml', lang: 'python', code: compose({ ...opts, worker: opts.worker && WORKER_CMD.python }) },
+  { path: 'docker-compose.yml', lang: 'go', code: compose({ ...opts, worker: opts.worker && WORKER_CMD.go }) },
 ];
 
 // ── The stations ─────────────────────────────────────────────────────────
@@ -1024,12 +1507,15 @@ export const STEPS = [
     ],
     files: [
       ...appFiles('s1'),
+      { path: 'app/tsconfig.json', lang: 'ts', code: TS.tsconfig, note: 'only for type checking' },
       { path: 'app/requirements.txt', lang: 'python', code: PY.requirements1 },
       { path: 'loadtest/smoke.js', lang: 'any', code: K6_SMOKE, note: 'k6 load test, same for every language' },
     ],
     run: {
       any: ['mkdir -p my-system/app my-system/loadtest', 'cd my-system/app'],
-      node: ['npm init -y', 'npm install express@5', 'node server.js'],
+      ts: ['node -v        # needs Node 22.18+ or 24 (runs .ts files directly)', 'npm init -y', 'npm pkg set type=module scripts.start="node server.ts" scripts.typecheck="tsc --noEmit"'],
+      express: ['npm install express@5', 'npm install -D typescript @types/node @types/express', 'npm run typecheck', 'npm start'],
+      fastify: ['npm install fastify@5', 'npm install -D typescript @types/node', 'npm run typecheck', 'npm start'],
       python: ['python3 -m venv .venv && source .venv/bin/activate', 'pip install -r requirements.txt', 'uvicorn main:app --reload --port 3000'],
       go: ['go version        # needs Go 1.25 or newer (the Postgres driver requires it)', 'go mod init mysystem', 'go run .'],
     },
@@ -1068,7 +1554,7 @@ export const STEPS = [
         'docker exec -i pg psql -U postgres -d shop < schema.sql',
         'cd app',
       ],
-      node: ['npm install pg', 'node server.js'],
+      ts: ['npm install pg', 'npm install -D @types/pg', 'npm run typecheck', 'npm start'],
       python: ['pip install -r requirements.txt', 'uvicorn main:app --reload --port 3000'],
       go: ['go mod tidy        # reads the imports in main.go and downloads pgx + everything it needs', 'go run .'],
     },
@@ -1090,21 +1576,19 @@ export const STEPS = [
     sim: { users: 1500 },
     tasks: [
       'Stop the hand-started Postgres: docker rm -f pg',
-      'Add the Dockerfile to app/ and docker-compose.yml to my-system/',
+      'Add the Dockerfile and .dockerignore to app/, and docker-compose.yml to my-system/',
       'Start everything with docker compose up --build',
       'Check that /products/42 still works',
     ],
     files: [
-      { path: 'app/Dockerfile', lang: 'node', code: NODE.dockerfile },
+      { path: 'app/Dockerfile', lang: 'ts', code: TS.dockerfile },
       { path: 'app/Dockerfile', lang: 'python', code: PY.dockerfile },
       { path: 'app/Dockerfile', lang: 'go', code: GO.dockerfile },
-      { path: 'app/.dockerignore', lang: 'node', code: 'node_modules\nnpm-debug.log\n', note: 'keeps your local node_modules out of the image' },
+      { path: 'app/.dockerignore', lang: 'ts', code: 'node_modules\nnpm-debug.log\n', note: 'keeps your local node_modules out of the image' },
       { path: 'app/.dockerignore', lang: 'python', code: '.venv\n__pycache__\n', note: 'keeps your local virtualenv out of the image' },
       { path: 'docker-compose.yml', lang: 'any', code: compose(), note: 'in my-system/' },
     ],
-    run: {
-      any: ['docker rm -f pg', 'cd my-system', 'docker compose up --build'],
-    },
+    run: { any: ['docker rm -f pg', 'cd my-system', 'docker compose up --build'] },
     verify: ['curl http://localhost:3000/products/42', 'docker compose ps'],
     expect: 'Two containers are running: app and db. The database is created and filled automatically from schema.sql.',
     breaks: 'Still one app server: if it is busy or crashes, everyone waits or sees errors. Next: many servers behind a load balancer.',
@@ -1152,16 +1636,16 @@ export const STEPS = [
       'Rebuild: the count now goes 1, 2, 3, 4… whichever server answers',
     ],
     files: [
-      { path: APP_FILE.node, lang: 'node', code: NODE.s5bug, note: 'step 1: the stateful version (the bug)', tag: 'bug' },
-      { path: APP_FILE.python, lang: 'python', code: PY.s5bug, note: 'step 1: the stateful version (the bug)', tag: 'bug' },
-      { path: APP_FILE.go, lang: 'go', code: GO.s5bug, note: 'step 1: the stateful version (the bug)', tag: 'bug' },
+      ...bugFiles(),
       ...appFiles('s5', 'step 2: the stateless fix (full file)'),
       { path: 'docker-compose.yml', lang: 'any', code: compose({ proxy: true, redis: true }) },
     ],
     run: {
-      node: ['# 1) the bug: after adding the snippet', 'docker compose up -d --build --scale app=3', 'docker compose restart nginx', '# 2) the fix: after replacing server.js and docker-compose.yml', 'cd app && npm install redis && cd ..', 'docker compose up -d --build --scale app=3', 'docker compose restart nginx'],
-      python: ['# 1) the bug: after adding the snippet', 'docker compose up -d --build --scale app=3', 'docker compose restart nginx', '# 2) the fix: after replacing main.py and docker-compose.yml (redis is already in requirements.txt)', 'docker compose up -d --build --scale app=3', 'docker compose restart nginx'],
-      go: ['# 1) the bug: after adding the snippet', 'docker compose up -d --build --scale app=3', 'docker compose restart nginx', '# 2) the fix: after replacing main.go and docker-compose.yml', 'cd app && go mod tidy && cd ..        # adds go-redis from the new imports', 'docker compose up -d --build --scale app=3', 'docker compose restart nginx'],
+      any: ['# 1) the bug: after adding the snippet', 'docker compose up -d --build --scale app=3', 'docker compose restart nginx'],
+      ts: ['# 2) the fix: after replacing server.ts and docker-compose.yml', 'cd app && npm install redis && npm run typecheck && cd ..'],
+      python: ['# 2) the fix: after replacing main.py and docker-compose.yml (redis is already in requirements.txt)'],
+      go: ['# 2) the fix: after replacing main.go and docker-compose.yml', 'cd app && go mod tidy && cd ..        # adds go-redis from the new imports'],
+      after: ['docker compose up -d --build --scale app=3', 'docker compose restart nginx'],
     },
     verify: ['for i in 1 2 3 4 5 6; do curl -s http://localhost:8080/visit/alice; echo; done'],
     expect: 'Bug: visits go 1, 1, 1, 2, 2, 2 as requests rotate. Fixed: 1, 2, 3, 4, 5, 6 no matter which server answers.',
@@ -1208,15 +1692,14 @@ export const STEPS = [
       'Place orders, watch the worker log, then stop the worker and see the backlog grow',
     ],
     files: [
-      { path: 'schema-orders.sql', lang: 'any', code: SCHEMA_ORDERS, note: 'also append it to schema.sql for fresh setups' },
+      { path: 'schema-orders.sql', lang: 'any', code: SCHEMA_ORDERS, note: 'keep this file: the Terraform station uses it too' },
       ...appFiles('s7'),
-      { path: 'app/worker.js', lang: 'node', code: NODE.worker },
+      { path: 'app/worker.ts', lang: 'ts', code: TS.worker },
       { path: 'app/worker.py', lang: 'python', code: PY.worker },
-      { path: 'docker-compose.yml', lang: 'node', code: compose({ proxy: true, redis: true, worker: WORKER_CMD.node }) },
-      { path: 'docker-compose.yml', lang: 'python', code: compose({ proxy: true, redis: true, worker: WORKER_CMD.python }) },
-      { path: 'docker-compose.yml', lang: 'go', code: compose({ proxy: true, redis: true, worker: WORKER_CMD.go }) },
+      ...perLangCompose({ proxy: true, redis: true, worker: true }),
     ],
     run: {
+      ts: ['cd app && npm run typecheck && cd ..'],
       any: [
         'docker compose exec -T db psql -U postgres -d shop < schema-orders.sql',
         'docker compose up -d --build --scale app=3',
@@ -1259,28 +1742,111 @@ export const STEPS = [
       'docker compose up -d --scale app=3      # bring it back',
     ],
     expect: 'k6 shows failed checks: those are 429s from the limiter, protecting the servers. With one replica killed, requests still succeed on the others.',
-    breaks: 'You still don’t know the real limit of what you built. Next: load-test until it breaks.',
+    breaks: 'You only see numbers when you run k6 yourself, and you cannot tell which part of the system is struggling. Next: metrics and dashboards.',
+  },
+  {
+    id: 'observe',
+    title: 'See inside: Prometheus + Grafana',
+    short: 'Observability',
+    goal: 'Give every server a /metrics endpoint, collect it with Prometheus, and watch live dashboards in Grafana.',
+    why: 'You cannot fix what you cannot see. Metrics show requests per second, latency and errors for every server over time. Engineers look at dashboards like this before, during and after every launch.',
+    concepts: ['monitoring', 'p95', 'rps', 'errorrate', 'utilization'],
+    patterns: ['observability'],
+    sim: { users: 12000, lb: true, servers: 3, proxy: true, sessions: 'shared', cache: true, cacheGb: 8, queue: true, workers: 2, gateway: true },
+    tasks: [
+      'Install the metrics library and replace the server file (it adds /metrics)',
+      'Add the Prometheus and Grafana files and the new docker-compose.yml',
+      'Start everything and open Grafana at http://localhost:3001',
+      'Run a load test and watch the "My system" dashboard move',
+    ],
+    files: [
+      ...appFiles('s8', 'adds request timing + a /metrics endpoint'),
+      { path: 'app/requirements.txt', lang: 'python', code: PY.requirements8 },
+      { path: 'observability/prometheus.yml', lang: 'any', code: PROMETHEUS_YML },
+      { path: 'observability/grafana/provisioning/datasources/prometheus.yml', lang: 'any', code: GRAFANA_DATASOURCE, note: 'connects Grafana to Prometheus automatically' },
+      { path: 'observability/grafana/provisioning/dashboards/dashboards.yml', lang: 'any', code: GRAFANA_PROVIDER, note: 'tells Grafana where dashboards live' },
+      { path: 'observability/grafana/dashboards/my-system.json', lang: 'any', code: GRAFANA_DASHBOARD, note: 'the ready-made dashboard' },
+      ...perLangCompose({ proxy: true, redis: true, worker: true, observability: true }),
+    ],
+    run: {
+      ts: ['cd app && npm install prom-client && npm run typecheck && cd ..'],
+      go: ['cd app && go mod tidy && cd ..        # adds the Prometheus client library'],
+      any: ['docker compose up -d --build --scale app=3', 'docker compose restart nginx'],
+    },
+    verify: [
+      'curl -s http://localhost:8080/metrics | grep http_request_duration_seconds_count',
+      'open http://localhost:9090/targets      # Prometheus: 3 app targets, all UP',
+      'open http://localhost:3001              # Grafana → Dashboards → My system → My system',
+      'k6 run -e TARGET=http://localhost:8080/products/42 loadtest/smoke.js',
+    ],
+    expect: 'Prometheus lists one target per app replica. In Grafana the dashboard shows requests per second by route and by server, p95 latency and error responses, updating every 5 seconds. (Grafana has login disabled here: fine on your laptop, never in production.)',
+    breaks: 'You can see the system now, but you still do not know its limit. Next: push it until it breaks, with Grafana open.',
   },
   {
     id: 'breaking-point',
     title: 'Load-test to the breaking point',
     short: 'Breaking point',
-    goal: 'Ramp traffic from 50 to 500 virtual users, watch CPU and memory, and find which part gives out first.',
+    goal: 'Ramp traffic from 50 to 500 virtual users while watching Grafana and docker stats, and find which part gives out first.',
     why: 'This is what engineers really do before a launch: measure, find the bottleneck, fix it, measure again. Compare your results with the Simulator.',
     concepts: ['bottleneck', 'utilization', 'p95', 'errorrate', 'rps'],
     patterns: ['observability', 'autoscaling'],
     sim: { users: 20000, lb: true, servers: 3, proxy: true, sessions: 'shared', cache: true, cacheGb: 8, queue: true, workers: 2, pattern: 'ramp' },
     tasks: [
       'Temporarily raise or remove the NGINX rate limit (otherwise you only test the limiter)',
-      'Run the ramp test while watching docker stats in a second terminal',
+      'Run the ramp test with Grafana and docker stats open',
       'Note the user count where errors or p95 latency jump',
       'Change one thing (replicas, cache TTL, pool size), run again and compare',
     ],
     files: [{ path: 'loadtest/ramp.js', lang: 'any', code: K6_RAMP }],
     run: { any: ['docker stats      # in a second terminal'] },
     verify: ['k6 run loadtest/ramp.js', 'docker compose up -d --scale app=5 && docker compose restart nginx', 'k6 run loadtest/ramp.js'],
-    expect: 'At some point http_req_failed or p(95) crosses the thresholds and k6 marks them ✗. docker stats shows which container is at 100% CPU: that is your bottleneck.',
-    breaks: 'One database still takes every write, and everything runs in one place. Next: the paths real systems take from here.',
+    expect: 'At some point http_req_failed or p(95) crosses the thresholds and k6 marks them ✗. Grafana shows exactly when latency climbed, and docker stats shows which container sat at 100% CPU: that is your bottleneck.',
+    breaks: 'Your whole setup lives in hand-edited files and commands. Recreating it, or changing its size, means repeating steps by hand. Next: describe the infrastructure as code.',
+  },
+  {
+    id: 'iac',
+    title: 'Infrastructure as code: Terraform or OpenTofu',
+    short: 'Infra as code',
+    iac: true,
+    goal: 'Describe the whole stack (network, Postgres, Redis, N app servers, worker, NGINX) in code, then create, resize and destroy it with plan and apply.',
+    why: 'In real companies infrastructure is never clicked together by hand. It lives in reviewed, versioned code. You change a number, preview the change with plan, and apply it. This station uses your local Docker, so no cloud account is needed; the same workflow drives AWS, GCP or Azure.',
+    concepts: ['iac', 'horizontal', 'spof'],
+    patterns: ['horizontal-scaling', 'cell-based'],
+    sim: { users: 20000, lb: true, servers: 3, proxy: true, sessions: 'shared', cache: true, cacheGb: 8, queue: true, workers: 2 },
+    tasks: [
+      'Install {{TOOL}} and stop the Compose stack (docker compose down)',
+      'Add the infra/ files, then run {{tf}} init and {{tf}} plan',
+      'Run {{tf}} apply and call http://localhost:8081',
+      'Change app_replicas to 5, plan and apply again; then delete a container by hand and watch plan detect the drift',
+      'Finish with {{tf}} destroy',
+    ],
+    files: [
+      { path: 'infra/main.tf', lang: 'any', code: IAC_MAIN, note: 'identical for Terraform and OpenTofu' },
+      { path: 'infra/nginx.conf.tftpl', lang: 'any', code: IAC_NGINX_TPL, note: 'NGINX config generated from the list of app servers' },
+      { path: 'infra/terraform.tfvars', lang: 'ts', code: tfvars(WORKER_CMD.ts) },
+      { path: 'infra/terraform.tfvars', lang: 'python', code: tfvars(WORKER_CMD.python) },
+      { path: 'infra/terraform.tfvars', lang: 'go', code: tfvars(WORKER_CMD.go) },
+    ],
+    run: {
+      any: [
+        '{{INSTALL}}',
+        'docker compose down',
+        'cd infra',
+        '{{tf}} init        # downloads the Docker provider',
+        '{{tf}} plan        # preview: what will be created?',
+        '{{tf}} apply       # type "yes" to create it',
+      ],
+    },
+    verify: [
+      'for i in 1 2 3 4 5 6; do curl -s http://localhost:8081/; echo; done',
+      '{{tf}} apply -var app_replicas=5      # plan shows 2 servers to add, NGINX to update',
+      'docker rm -f iac-app-1                 # someone deletes a server by hand…',
+      '{{tf}} plan                            # …and plan detects the drift',
+      '{{tf}} apply                           # put it back',
+      '{{tf}} destroy                         # remove everything',
+    ],
+    expect: 'apply creates the containers and prints the url output; requests rotate across iac-app-0, 1, 2. Changing app_replicas only adds or removes what is needed. plan always shows exactly what will change before anything happens. The state file (terraform.tfstate) is how the tool remembers what it created.',
+    breaks: null,
   },
   {
     id: 'next',
@@ -1296,6 +1862,7 @@ export const STEPS = [
       'Too many DB connections? Put PgBouncer between the app and Postgres',
       'Static files and far-away users? Put a CDN (e.g. Cloudflare) in front',
       'Writes outgrow one database? Read about sharding, then try it in the Simulator',
+      'Ready for the cloud? Point your Terraform/OpenTofu code at a real provider (AWS, GCP, Azure)',
     ],
     files: [],
     run: {},
@@ -1304,3 +1871,20 @@ export const STEPS = [
     breaks: null,
   },
 ];
+
+// Terraform vs OpenTofu wording used in the IaC station.
+export const IAC_TOOLS = [
+  { id: 'terraform', label: 'Terraform', cmd: 'terraform', install: 'brew tap hashicorp/tap && brew install hashicorp/tap/terraform     # or see developer.hashicorp.com/terraform/install', note: 'By HashiCorp (now part of IBM). The original and most widely used IaC tool; licensed under the Business Source License (BSL) since 2023.' },
+  { id: 'opentofu', label: 'OpenTofu', cmd: 'tofu', install: 'brew install opentofu     # or see opentofu.org/docs/intro/install', note: 'An open-source fork of Terraform, created in 2023 and run by the Linux Foundation (MPL-2.0 licence). Same HCL language and providers; the command is tofu.' },
+];
+
+// Fills {{tf}}, {{TOOL}} and {{INSTALL}} for the chosen IaC tool.
+export function iacText(text, toolId) {
+  const t = IAC_TOOLS.find((x) => x.id === toolId) || IAC_TOOLS[0];
+  return text.replaceAll('{{tf}}', t.cmd).replaceAll('{{TOOL}}', t.label).replaceAll('{{INSTALL}}', t.install);
+}
+
+// Is a file / command group meant for this language?
+export function forLang(tag, lang) {
+  return tag === 'any' || tag === lang || (tag === 'ts' && (lang === 'express' || lang === 'fastify'));
+}

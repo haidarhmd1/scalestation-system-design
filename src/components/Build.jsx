@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LANGS, STEPS } from '../data/journey.js';
+import { IAC_TOOLS, LANGS, STEPS, forLang, iacText } from '../data/journey.js';
 import { GLOSSARY } from '../data/glossary.js';
 import { PATTERNS } from '../data/patterns.js';
 import { Info, useGlossary } from './Glossary.jsx';
@@ -9,9 +9,17 @@ const STORE_KEY = 'scalestation.build';
 function loadProgress() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-    if (s && typeof s === 'object') return { lang: s.lang || null, current: s.current || STEPS[0].id, done: s.done || {} };
+    if (s && typeof s === 'object') {
+      const lang = s.lang === 'node' ? 'express' : s.lang; // older saves used plain "node"
+      return {
+        lang: LANGS.some((l) => l.id === lang) ? lang : null,
+        current: STEPS.some((x) => x.id === s.current) ? s.current : STEPS[0].id,
+        done: s.done || {},
+        iac: s.iac || 'terraform',
+      };
+    }
   } catch { /* storage unavailable */ }
-  return { lang: null, current: STEPS[0].id, done: {} };
+  return { lang: null, current: STEPS[0].id, done: {}, iac: 'terraform' };
 }
 
 export default function Build({ onTrySim, onOpenPattern }) {
@@ -36,6 +44,10 @@ export default function Build({ onTrySim, onOpenPattern }) {
     return { ...s, done: { ...s.done, [step.id]: [...cur].sort((a, b) => a - b) } };
   });
   const setLang = (l) => setState((s) => ({ ...s, lang: l }));
+  const setIac = (t) => setState((s) => ({ ...s, iac: t }));
+  const isNode = lang === 'express' || lang === 'fastify';
+  const [lastNode, setLastNode] = useState(isNode ? lang : 'express');
+  useEffect(() => { if (isNode) setLastNode(lang); }, [lang, isNode]);
   const reset = () => {
     if (window.confirm('Reset your progress on every station? Your chosen language stays.')) {
       setState((s) => ({ ...s, current: STEPS[0].id, done: {} }));
@@ -61,14 +73,24 @@ export default function Build({ onTrySim, onOpenPattern }) {
       <section className="lang-pick">
         <div className="panel-label mono">1 · CHOOSE YOUR LANGUAGE <span className="dim">(you can switch any time)</span></div>
         <div className="lang-cards">
-          {LANGS.map((l) => (
+          <div className={`lang-card ${isNode ? 'on' : ''}`} role="button" tabIndex={0} aria-pressed={isNode}
+            onClick={() => !isNode && setLang(lastNode)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && !isNode && setLang(lastNode)}>
+            <span className="lang-name">Node.js</span>
+            <span className="lang-sub mono">TypeScript · Node 22.18+</span>
+            <div className="fw-pick" onClick={(e) => e.stopPropagation()}>
+              {LANGS.filter((l) => l.group === 'node').map((l) => (
+                <button key={l.id} className={lang === l.id ? 'on' : ''} onClick={() => setLang(l.id)} aria-pressed={lang === l.id}>{l.framework}</button>
+              ))}
+            </div>
+          </div>
+          {LANGS.filter((l) => !l.group).map((l) => (
             <button key={l.id} className={`lang-card ${lang === l.id ? 'on' : ''}`} onClick={() => setLang(l.id)} aria-pressed={lang === l.id}>
               <span className="lang-name">{l.label}</span>
               <span className="lang-sub mono">{l.sub}</span>
             </button>
           ))}
         </div>
-        <p className="dim small lang-note">You also need <b>Docker</b> (from station 2) and <b>k6</b> for load tests. Prefer another language? The HTTP endpoints are the same in every version (<span className="mono">GET /products/:id</span>, <span className="mono">GET /visit/:user</span>, <span className="mono">POST /orders</span>), so you can follow along in any language and copy the Docker, NGINX and k6 files as they are.</p>
+        <p className="dim small lang-note">You also need <b>Docker</b> (from station 2) and <b>k6</b> for load tests. For Node.js, pick <b>Express</b> (the classic, most tutorials use it) or <b>Fastify</b> (faster, schema-first). Prefer another language? The HTTP endpoints are the same in every version (<span className="mono">GET /products/:id</span>, <span className="mono">GET /visit/:user</span>, <span className="mono">POST /orders</span>, <span className="mono">GET /metrics</span>), so you can follow along in any language and copy the Docker, NGINX, Grafana, Terraform and k6 files as they are.</p>
       </section>
 
       <SystemLine steps={STEPS} isDone={isDone} current={step.id} onGo={go} />
@@ -98,7 +120,7 @@ export default function Build({ onTrySim, onOpenPattern }) {
               <p className="dim">Choose Node.js, Python or Go above. All code and commands on every station switch to it.</p>
             </div>
           ) : (
-            <Station step={step} index={idx} lang={lang} done={state.done[step.id] || []} onToggle={toggleTask}
+            <Station step={step} index={idx} lang={lang} iac={state.iac} onIac={setIac} done={state.done[step.id] || []} onToggle={toggleTask}
               onPrev={idx > 0 ? () => go(STEPS[idx - 1].id) : null}
               onNext={idx < STEPS.length - 1 ? () => go(STEPS[idx + 1].id) : null}
               onTrySim={onTrySim} onOpenPattern={onOpenPattern} />
@@ -113,7 +135,7 @@ function SystemLine({ steps, isDone, current, onGo }) {
   return (
     <section className="sysline panel" aria-label="Your system so far">
       <div className="panel-label mono">YOUR SYSTEM SO FAR <Info term="horizontal" label="scaling" /></div>
-      <div className="sysline-track">
+      <div className="sysline-track" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
         {steps.map((s, i) => (
           <button key={s.id} className={`sys-stop ${isDone(s) ? 'done' : ''} ${s.id === current ? 'on' : ''}`} onClick={() => onGo(s.id)} title={s.title}>
             <span className="sys-dot" />
@@ -126,12 +148,16 @@ function SystemLine({ steps, isDone, current, onGo }) {
   );
 }
 
-function Station({ step, index, lang, done, onToggle, onPrev, onNext, onTrySim, onOpenPattern }) {
+function Station({ step, index, lang, iac, onIac, done, onToggle, onPrev, onNext, onTrySim, onOpenPattern }) {
   const { open } = useGlossary();
-  const files = step.files.filter((f) => f.lang === 'any' || f.lang === lang);
-  const runCmds = [...(step.run.any || []), ...(step.run[lang] || [])];
-  const langLabel = LANGS.find((l) => l.id === lang)?.label;
+  const t = (text) => iacText(text, iac);
+  const files = step.files.filter((f) => forLang(f.lang, lang));
+  // Command groups run in the order they are written; keep the ones for this language.
+  const runCmds = Object.entries(step.run).filter(([k]) => k === 'after' || forLang(k, lang)).flatMap(([, v]) => v).map(t);
+  const L = LANGS.find((l) => l.id === lang);
+  const langLabel = L?.group === 'node' ? `Node.js · TypeScript · ${L.framework}` : `${L?.label} · ${L?.sub}`;
   const allDone = done.length >= step.tasks.length;
+  const tool = IAC_TOOLS.find((x) => x.id === iac) || IAC_TOOLS[0];
 
   return (
     <article className="station-page">
@@ -140,6 +166,15 @@ function Station({ step, index, lang, done, onToggle, onPrev, onNext, onTrySim, 
         <h2>{step.title}{allDone && <span className="station-done mono">✓ done</span>}</h2>
         <p className="lede">{step.goal}</p>
         <div className="why"><b>Why it matters:</b> {step.why}</div>
+        {step.iac && (
+          <div className="iac-pick">
+            <span className="mono dim small">CHOOSE YOUR TOOL</span>
+            <div className="seg">
+              {IAC_TOOLS.map((x) => <button key={x.id} className={iac === x.id ? 'on' : ''} onClick={() => onIac(x.id)}>{x.label}</button>)}
+            </div>
+            <p className="dim small">{tool.note} The files below work with both; only the command changes (<span className="mono">{tool.cmd}</span>).</p>
+          </div>
+        )}
         <div className="station-links">
           <div>
             <span className="mono dim small">LEARN </span>
@@ -161,11 +196,11 @@ function Station({ step, index, lang, done, onToggle, onPrev, onNext, onTrySim, 
       <section className="panel">
         <div className="panel-label mono">CHECKLIST</div>
         <ul className="tasks">
-          {step.tasks.map((t, i) => (
+          {step.tasks.map((task, i) => (
             <li key={i}>
               <label className={done.includes(i) ? 'checked' : ''}>
                 <input type="checkbox" checked={done.includes(i)} onChange={() => onToggle(i)} />
-                <span>{t}</span>
+                <span>{t(task)}</span>
               </label>
             </li>
           ))}
@@ -189,8 +224,8 @@ function Station({ step, index, lang, done, onToggle, onPrev, onNext, onTrySim, 
       {step.verify.length > 0 && (
         <section className="panel">
           <div className="panel-label mono">PROVE IT WORKS</div>
-          <CodeBlock title="terminal" code={step.verify.join('\n')} terminal />
-          <p className="expect"><b>What you should see:</b> {step.expect}</p>
+          <CodeBlock title="terminal" code={step.verify.map(t).join('\n')} terminal />
+          <p className="expect"><b>What you should see:</b> {t(step.expect)}</p>
         </section>
       )}
       {step.verify.length === 0 && <section className="panel"><p className="expect"><b>The loop:</b> {step.expect}</p></section>}
