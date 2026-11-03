@@ -32,7 +32,7 @@ export default function App() {
       <nav className="topnav">
         <div className="brand">
           <span className="brand-signal"><i /><i /><i /></span>
-          <span className="brand-name">SCALEYARD</span>
+          <span className="brand-name">SCALESTATION</span>
           <span className="brand-sub mono">system design simulator</span>
         </div>
         <div className="tabs" role="tablist">
