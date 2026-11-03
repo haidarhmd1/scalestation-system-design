@@ -1,0 +1,39 @@
+# Dependencies (reinstall with `npm install`)
+node_modules/
+
+# Build output (recreate with `npm run build`)
+dist/
+dist-ssr/
+*.local
+
+# Vite cache
+.vite/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Test and coverage output
+coverage/
+*.tsbuildinfo
+
+# Claude Code: personal, machine-specific settings
+.claude/settings.local.json

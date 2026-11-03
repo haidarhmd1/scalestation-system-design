@@ -95,7 +95,7 @@ function GlossaryModal({ id, canBack, onBack, onOpen, onClose }) {
             <Sec icon="📜" title="Where the word comes from">{g.origin}</Sec>
             <Sec icon="🔎" title="What it is">{g.what}</Sec>
             <Sec icon="⚙️" title="What it does">{g.does}</Sec>
-            <Sec icon="🍽️" title="Beginner example" tone="ex">{g.example}</Sec>
+            <Sec icon="🍽️" title="Example" tone="ex">{g.example}</Sec>
             <Sec icon="📈" title="Why it matters & when to scale it" tone="why">{g.why}</Sec>
             <NeedLists term={id} />
             <div className="gl-related">
