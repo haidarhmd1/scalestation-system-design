@@ -545,3 +545,5 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
   .side-rail { min-height: 0; flex-direction: row; justify-content: center; padding: 10px 14px; }
   .side-rail-text, .side-rail.left .side-rail-text { writing-mode: horizontal-tb; transform: none; }
 }
+.state-hint { margin: -4px 0 8px; }
+.state-hint .term { white-space: normal; }
