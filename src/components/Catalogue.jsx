@@ -21,7 +21,7 @@ export default function Catalogue({ onTrySim }) {
       <section className="hero">
         <div>
           <div className="eyebrow mono">NETWORK MAP · {PATTERNS.length} STATIONS · 5 LINES</div>
-          <h1>System design, one stop at a time.</h1>
+          <h1>Learn system design by building, scaling and breaking it.</h1>
           <p className="lede">Ride from a single server to planet-scale databases. Each station is a pattern: click it to watch a request travel through the system step by step, then try it in the <b>Simulator</b>.</p>
         </div>
         <div className="legend">
