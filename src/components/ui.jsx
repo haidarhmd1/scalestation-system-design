@@ -1,8 +1,10 @@
-export function Slider({ label, value, min, max, step = 1, onChange, display, hint, disabled }) {
+import { Info } from './Glossary.jsx';
+
+export function Slider({ label, value, min, max, step = 1, onChange, display, hint, disabled, info }) {
   return (
     <label className={`field ${disabled ? 'disabled' : ''}`}>
       <span className="field-row">
-        <span className="field-label">{label}</span>
+        <span className="field-label">{label}{info && <Info term={info} label={label} />}</span>
         <span className="field-val mono">{display ?? value}</span>
       </span>
       <input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
@@ -11,31 +13,31 @@ export function Slider({ label, value, min, max, step = 1, onChange, display, hi
   );
 }
 
-export function StepSlider({ label, steps, value, onChange, unit = '', hint, disabled }) {
+export function StepSlider({ label, steps, value, onChange, unit = '', hint, disabled, info }) {
   const idx = Math.max(0, steps.indexOf(value));
   return (
-    <Slider label={label} min={0} max={steps.length - 1} value={idx} onChange={(i) => onChange(steps[i])} display={`${value}${unit}`} hint={hint} disabled={disabled} />
+    <Slider label={label} min={0} max={steps.length - 1} value={idx} onChange={(i) => onChange(steps[i])} display={`${value}${unit}`} hint={hint} disabled={disabled} info={info} />
   );
 }
 
-export function Toggle({ label, checked, onChange, hint }) {
+export function Toggle({ label, checked, onChange, hint, info }) {
   return (
-    <label className="toggle">
+    <div className="toggle" onClick={() => onChange(!checked)}>
       <span>
-        <span className="field-label">{label}</span>
+        <span className="field-label">{label}{info && <Info term={info} label={label} />}</span>
         {hint && <span className="field-hint">{hint}</span>}
       </span>
-      <button type="button" role="switch" aria-checked={checked} className={checked ? 'switch on' : 'switch'} onClick={() => onChange(!checked)}>
+      <button type="button" role="switch" aria-checked={checked} aria-label={label} className={checked ? 'switch on' : 'switch'} onClick={(e) => { e.stopPropagation(); onChange(!checked); }}>
         <i />
       </button>
-    </label>
+    </div>
   );
 }
 
-export function Segmented({ options, value, onChange, label }) {
+export function Segmented({ options, value, onChange, label, info }) {
   return (
     <div className="field">
-      {label && <span className="field-label">{label}</span>}
+      {label && <span className="field-label">{label}{info && <Info term={info} label={label} />}</span>}
       <div className="seg">
         {options.map((o) => {
           const v = typeof o === 'object' ? o.value : o;
@@ -49,7 +51,7 @@ export function Segmented({ options, value, onChange, label }) {
   );
 }
 
-export function Sparkline({ series, height = 54, max, label, value, unit }) {
+export function Sparkline({ series, height = 54, max, label, value, unit, info }) {
   const w = 240;
   const all = series.flatMap((s) => s.data);
   const top = max ?? Math.max(1e-9, ...all) * 1.1;
@@ -58,7 +60,7 @@ export function Sparkline({ series, height = 54, max, label, value, unit }) {
   return (
     <div className="spark">
       <div className="spark-head">
-        <span className="mono dim">{label}</span>
+        <span className="mono dim">{label}{info && <Info term={info} label={label} />}</span>
         <span className="mono">{value}{unit}</span>
       </div>
       <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="spark-svg">

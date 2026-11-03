@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, LEVELS, PATTERNS } from '../data/patterns.js';
 import FlowDiagram from './FlowDiagram.jsx';
+import { useGlossary } from './Glossary.jsx';
+import { GLOSSARY, termsIn } from '../data/glossary.js';
 
 export default function Catalogue({ onTrySim }) {
   const [query, setQuery] = useState('');
@@ -130,6 +132,7 @@ function PatternModal({ pattern: p, onClose, onNav, onTrySim }) {
               <Section title="Costs" tone="bad"><ul>{p.cons.map((u) => <li key={u}>{u}</li>)}</ul></Section>
             </div>
             <Section title="Seen in the wild"><p className="dim">{p.examples}</p></Section>
+            <KeyTerms text={`${p.title} ${p.summary} ${p.what} ${p.why} ${p.useWhen.join(' ')} ${p.pros.join(' ')} ${p.cons.join(' ')}`} />
           </div>
         </div>
 
@@ -140,6 +143,22 @@ function PatternModal({ pattern: p, onClose, onNav, onTrySim }) {
         </footer>
       </div>
     </div>
+  );
+}
+
+function KeyTerms({ text }) {
+  const { open } = useGlossary();
+  const ids = termsIn(text);
+  if (!ids.length) return null;
+  return (
+    <section className="msec">
+      <h3 className="mono">Key terms explained</h3>
+      <div className="chips">
+        {ids.map((id) => (
+          <button key={id} className="chip term-chip" onClick={() => open(id)}><span className="info static">i</span>{GLOSSARY[id].title}</button>
+        ))}
+      </div>
+    </section>
   );
 }
 

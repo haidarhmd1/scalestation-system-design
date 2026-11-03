@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmt, pct } from '../sim/model.js';
+import { shortTech } from '../sim/tech.js';
 
 export const STATUS_COLOR = { green: '#3ddc84', amber: '#ffb020', red: '#ff7a45', broken: '#ff4d4f', off: '#3a4552' };
 
@@ -53,7 +54,71 @@ function pointAt(g, s) {
   return [l.x2, l.y2];
 }
 
-export default function SimMap({ r, cfg, servers, booting, selected, onSelect }) {
+const VW = 1240;
+const VH = 590;
+
+export default function SimMap({ r, cfg, servers, booting, selected, onSelect, fullscreen }) {
+  // ── pan & zoom ──
+  const svgRef = useRef(null);
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const drag = useRef(null);
+  const moved = useRef(false);
+
+  const zoomAt = useCallback((factor, cx, cy) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const px = cx ?? rect.left + rect.width / 2;
+    const py = cy ?? rect.top + rect.height / 2;
+    const p = new DOMPoint(px, py).matrixTransform(svg.getScreenCTM().inverse());
+    setView((v) => {
+      const k = Math.min(5, Math.max(0.5, v.k * factor));
+      return { k, x: p.x - ((p.x - v.x) * v.k) / k, y: p.y - ((p.y - v.y) * v.k) / k };
+    });
+  }, []);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    const onWheel = (e) => {
+      if (!(fullscreen || e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      zoomAt(Math.exp(-e.deltaY * 0.0018), e.clientX, e.clientY);
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, [fullscreen, zoomAt]);
+
+  // fit again when entering / leaving full screen
+  useEffect(() => { setView({ x: 0, y: 0, k: 1 }); }, [fullscreen]);
+
+  const onPointerDown = (e) => {
+    if (e.button !== 0) return;
+    drag.current = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, active: false };
+    moved.current = false;
+  };
+  const onPointerMove = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx;
+    const dy = e.clientY - d.sy;
+    if (!d.active && Math.hypot(dx, dy) > 4) {
+      d.active = true;
+      moved.current = true;
+      svgRef.current.setPointerCapture(e.pointerId);
+    }
+    if (d.active) {
+      const m = svgRef.current.getScreenCTM();
+      setView((v) => ({ ...v, x: d.vx - dx / m.a, y: d.vy - dy / m.d }));
+    }
+  };
+  const endDrag = () => { drag.current = null; };
+  const onClickCapture = (e) => {
+    if (moved.current) {
+      e.stopPropagation();
+      e.preventDefault();
+      moved.current = false;
+    }
+  };
   const t = r.tiers;
   const layer = useRef(null);
   const live = useRef({ r, cfg });
@@ -128,7 +193,15 @@ export default function SimMap({ r, cfg, servers, booting, selected, onSelect })
   const edgeOn = (k) => (r.flows[k] || 0) > 0.01;
 
   return (
-    <svg viewBox="0 0 1240 590" className="simmap" role="img" aria-label="Live system line diagram">
+    <div className="mapview">
+    <div className="map-tools" onPointerDown={(e) => e.stopPropagation()}>
+      <button type="button" onClick={() => zoomAt(1.25)} aria-label="Zoom in">+</button>
+      <button type="button" onClick={() => zoomAt(0.8)} aria-label="Zoom out">−</button>
+      <button type="button" onClick={() => setView({ x: 0, y: 0, k: 1 })} aria-label="Reset view" title="Reset view">⟲</button>
+      <span className="mono">{Math.round(view.k * 100)}%</span>
+    </div>
+    <svg ref={svgRef} viewBox={`${view.x} ${view.y} ${VW / view.k} ${VH / view.k}`} className={`simmap ${drag.current?.active ? 'dragging' : ''}`} role="img" aria-label="Live system line diagram"
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onClickCapture={onClickCapture}>
       <defs>
         <pattern id="sgrid" width="20" height="20" patternUnits="userSpaceOnUse">
           <path d="M20 0H0V20" fill="none" stroke="var(--grid)" strokeWidth="1" />
@@ -137,7 +210,7 @@ export default function SimMap({ r, cfg, servers, booting, selected, onSelect })
           <line x1="0" y1="0" x2="0" y2="6" stroke="#4da3ff" strokeWidth="2" />
         </pattern>
       </defs>
-      <rect width="1240" height="590" fill="url(#sgrid)" />
+      <rect x="-4000" y="-4000" width="9240" height="8590" fill="url(#sgrid)" />
 
       {Object.entries(EDGES).map(([k, pts]) => {
         const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ');
@@ -177,7 +250,31 @@ export default function SimMap({ r, cfg, servers, booting, selected, onSelect })
         lines={t.queue.on ? [`backlog ${fmt(t.queue.backlog)}`, `${t.queue.growth > 0 ? '▲ +' + fmt(t.queue.growth) + '/s' : '▼ draining'}`] : ['not built', 'writes sync']} />
       <Station id="workers" s={ST.workers} title={`WORKERS ×${cfg.workers}`} tier={t.workers} sel={selected} onSelect={onSelect}
         lines={t.workers.on ? [`${pct(t.workers.rho)} busy`, `${fmt(t.workers.in)}/s drained`] : ['not built', '']} />
+
+      {/* technology nameplates */}
+      {[
+        ['dns', true, shortTech(cfg, 'dns')],
+        ['cdn', cfg.cdn, shortTech(cfg, 'cdn')],
+        ['gateway', cfg.gateway, shortTech(cfg, 'gateway')],
+        ['lb', cfg.lb, shortTech(cfg, 'lb')],
+        ['app', true, shortTech(cfg, 'runtime') + (cfg.autoscale ? ` · ${shortTech(cfg, 'platform')}` : '')],
+        ['cache', cfg.cache, shortTech(cfg, 'cache')],
+        ['db', true, shortTech(cfg, 'db') + (cfg.pooler ? ` + ${shortTech(cfg, 'pooler')}` : '')],
+        ['queue', cfg.queue, shortTech(cfg, 'queue')],
+        ['workers', cfg.queue, shortTech(cfg, 'workers')],
+      ].filter(([, on, name]) => on && name).map(([id, , name]) => {
+        const s = ST[id];
+        const w = name.length * 6.2 + 16;
+        const y = s.y + s.h / 2 + 6;
+        return (
+          <g key={id} className="plate" onClick={() => onSelect(id)}>
+            <rect x={s.x - w / 2} y={y} width={w} height="17" rx="3" />
+            <text x={s.x} y={y + 12} textAnchor="middle">{name}</text>
+          </g>
+        );
+      })}
     </svg>
+    </div>
   );
 }
 
