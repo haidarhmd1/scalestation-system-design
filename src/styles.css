@@ -499,3 +499,20 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .seg:has(> .seg-opt) { flex-direction: column; flex-wrap: nowrap; }
 .seg:has(> .seg-opt) .seg-opt > button:not(.info) { text-align: left; padding: 6px 28px 6px 10px; }
 .seg .seg-opt > .info { right: 8px; }
+.note b { color: var(--text); }
+.note-links .info { vertical-align: -2px; }
+
+/* ── need / don't-need lists ─────────────────── */
+.need { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 16px; }
+.need.compact { grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+.need-col { border-radius: 9px; padding: 10px 12px; }
+.need-col h3 { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 6px; }
+.need-col ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; }
+.need.compact ul { font-size: 12px; }
+.need-col li { margin: 4px 0; }
+.need-col.yes { background: #0f1f17; border: 1px solid #1f4d33; }
+.need-col.yes h3 { color: var(--green); }
+.need-col.no { background: #241214; border: 1px solid #5a2226; }
+.need-col.no h3 { color: #ff8a8b; }
+@media (max-width: 700px) { .need { grid-template-columns: 1fr; } }
+

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ASSUMPTIONS as A, PRICES as P, fmt, ms, pct } from '../sim/model.js';
+import { ASSUMPTIONS as A, PRICES as P, PROXY_CPU_BOOST, PROXY_MEM_BOOST, PROXY_NODE_CAP, PROXY_STATIC_SHARE, fmt, ms, pct } from '../sim/model.js';
 import { Info } from './Glossary.jsx';
 
 const usd = (v) => (v >= 100 ? `$${fmt(v)}` : `$${v.toFixed(2)}`);
 
 const PRICE_SOURCES = [
   ['App server', `$${P.vcpuHr}/vCPU·h + $${P.ramGbHr}/GB·h`, 'AWS EC2 m6i.xlarge (4 vCPU, 16 GB) is ≈ $0.19/h on-demand in us-east-1. The formula gives $0.21/h for the same size. Other clouds (GCP, Azure) are within ~10–20%.'],
+  ['Reverse proxy', `$${P.proxyServerHr}/server·h`, 'NGINX, Caddy and Traefik are free, open-source software. The cost is the small share of each app server’s CPU and memory they use, roughly 1–2% of a typical instance.'],
   ['Load balancer', `$${P.lbNodeHr}/node·h + $${P.lbPerMReq}/M req`, 'AWS Application Load Balancer: ≈ $0.0225/h plus ≈ $0.008 per LCU-hour (a usage unit driven by requests and connections).'],
   ['API gateway', `$${P.gwHr}/h + $${P.gwPerMReq}/M req`, 'Sits between self-hosted (Kong or NGINX: you only pay for the server) and managed AWS API Gateway (HTTP APIs ≈ $1.00 per million requests, REST APIs ≈ $3.50).'],
   ['CDN', `$${P.cdnPerMReq}/M req`, 'Modelled like a flat-rate CDN plan (e.g. Cloudflare). Pay-as-you-go CloudFront charges ≈ $0.75–1.00 per million HTTPS requests plus ≈ $0.085/GB of bandwidth, so real bills can be noticeably higher.'],
@@ -25,6 +26,7 @@ const ASSUMPTION_ROWS = [
   ['Working set (hot data)', '1 GB + 30 KB per online user', 'Rough size of the data that is actively used. It decides cache hit rate and whether the DB is memory-bound.', 'workingset'],
   ['Cache hit rate', '1 − e^(−size ÷ (working set ÷ 3)), max 96%', 'Popularity is very uneven (the 80/20 rule, a Zipf distribution), so a cache much smaller than the data still catches most reads, with diminishing returns as it grows.', 'hitrate'],
   ['Cache node throughput', `${fmt(A.CACHE_CAP_PER_32GB)} ops/s per 32 GB`, 'A single Redis node commonly serves around 100k+ simple operations per second.', 'cache'],
+  ['Reverse proxy', `×${PROXY_CPU_BOOST} CPU · ×${PROXY_MEM_BOOST} memory headroom · serves ${PROXY_STATIC_SHARE * 100}% of static · ${fmt(PROXY_NODE_CAP)} req/s per server`, 'HTTPS encryption and gzip/brotli compression can take 10–20% of an app server’s CPU; moving them to an optimised C proxy (NGINX) frees that. Buffering slow clients means app workers finish and release memory sooner. NGINX serves static files from disk at tens of thousands of requests per second.', 'reverse-proxy'],
   ['Load balancer node', `${fmt(A.LB_NODE_CAP)} req/s`, 'NGINX or HAProxy on a mid-size VM handles tens of thousands of HTTP requests per second. Managed LBs scale beyond this automatically.', 'lb'],
   ['API gateway', `${fmt(A.GW_CAP)} req/s per region`, 'A horizontally scaled gateway tier per region.', 'gateway'],
   ['DB connections', '25 per app server · max 100 + 15 per GB of DB RAM', 'Each app server keeps its own connection pool. Postgres uses a separate process (~5–10 MB) per connection, so limits are typically a few hundred. A pooler multiplexes them.', 'pool'],

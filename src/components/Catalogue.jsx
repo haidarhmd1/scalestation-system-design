@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, LEVELS, PATTERNS } from '../data/patterns.js';
 import FlowDiagram from './FlowDiagram.jsx';
-import { useGlossary } from './Glossary.jsx';
+import { NeedLists, useGlossary } from './Glossary.jsx';
 import { GLOSSARY, termsIn } from '../data/glossary.js';
 
 export default function Catalogue({ onTrySim }) {
@@ -131,6 +131,7 @@ function PatternModal({ pattern: p, onClose, onNav, onTrySim }) {
               <Section title="Gains" tone="good"><ul>{p.pros.map((u) => <li key={u}>{u}</li>)}</ul></Section>
               <Section title="Costs" tone="bad"><ul>{p.cons.map((u) => <li key={u}>{u}</li>)}</ul></Section>
             </div>
+            {p.glossary && <NeedLists term={p.glossary} />}
             <Section title="Seen in the wild"><p className="dim">{p.examples}</p></Section>
             <KeyTerms text={`${p.title} ${p.summary} ${p.what} ${p.why} ${p.useWhen.join(' ')} ${p.pros.join(' ')} ${p.cons.join(' ')}`} />
           </div>

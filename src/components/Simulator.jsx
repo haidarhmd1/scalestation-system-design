@@ -3,14 +3,14 @@ import { DEFAULT_CONFIG, RAM_STEPS, SCENARIOS, VCPU_STEPS, advise, compute, find
 import SimMap, { STATUS_COLOR } from './SimMap.jsx';
 import { Popover, Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.jsx';
 import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js';
-import { Info } from './Glossary.jsx';
+import { Info, NeedLists } from './Glossary.jsx';
 import Methodology from './Methodology.jsx';
 import { termsIn } from '../data/glossary.js';
 
 const TICK_MS = 250;
 const SPEEDS = [{ value: 2, label: '1×' }, { value: 10, label: '5×' }, { value: 40, label: '20×' }];
 const HIST = 160;
-const TIER_NAMES = { gateway: 'Gateway', lb: 'Load balancer', app: 'App tier', cache: 'Cache', db: 'Database', queue: 'Queue', workers: 'Workers' };
+const TIER_NAMES = { gateway: 'Gateway', lb: 'Load balancer', proxy: 'Reverse proxy', app: 'App tier', cache: 'Cache', db: 'Database', queue: 'Queue', workers: 'Workers' };
 const SEV = { green: 0, amber: 1, red: 2, broken: 3, off: -1 };
 
 function trafficMult(pattern, t, spikeUntil) {
@@ -224,6 +224,7 @@ export default function Simulator({ preset }) {
             {[
               ['cdn', 'CDN', `${shortTech(cfg, 'cdn')}: static at the edge`, 'cdn'],
               ['gateway', 'Rate limiter', `${shortTech(cfg, 'gateway')}: blocks bots`, 'ratelimit'],
+              ['proxy', 'Reverse proxy', `${shortTech(cfg, 'proxy')}: TLS, gzip, static`, 'reverse-proxy'],
               ['lb', 'Load balancer', `${shortTech(cfg, 'lb')}: spreads load`, 'lb'],
               ['cache', 'Cache', `${shortTech(cfg, 'cache')}: fast reads`, 'cache'],
               ['queue', 'Queue', `${shortTech(cfg, 'queue')} + workers`, 'queue'],
@@ -488,9 +489,9 @@ function StationGuide({ id, cfg, update }) {
 
 function Inspector({ id, cfg, r, update, sim }) {
   const t = r.tiers;
-  const sc = serverCapacity(cfg.vcpu, cfg.ram);
+  const sc = serverCapacity(cfg.vcpu, cfg.ram, cfg.proxy);
   const tone = (rho) => (rho >= 1 ? 'bad' : rho >= 0.85 ? 'warn' : '');
-  const TERM = { users: 'rps', dns: 'dns', cdn: 'cdn', gateway: 'gateway', lb: 'lb', app: 'server', cache: 'cache', db: 'database', queue: 'queue', workers: 'worker' };
+  const TERM = { users: 'rps', dns: 'dns', cdn: 'cdn', gateway: 'gateway', lb: 'lb', proxy: 'reverse-proxy', app: 'server', cache: 'cache', db: 'database', queue: 'queue', workers: 'worker' };
   const head = (title, sub) => (
     <>
       <header className="insp-head">
@@ -545,6 +546,22 @@ function Inspector({ id, cfg, r, update, sim }) {
         <Stat k="Utilisation" info="utilization" v={cfg.lb ? pct(t.lb.rho) : '—'} tone={tone(t.lb.rho)} />
         <p className="note">IP hash pins each user to one server (sticky): sessions survive, but load spreads less evenly.</p>
       </div>);
+    case 'proxy': {
+      const plain = serverCapacity(cfg.vcpu, cfg.ram, false);
+      const boosted = serverCapacity(cfg.vcpu, cfg.ram, true);
+      return (<div>{head('Reverse proxy', 'A proxy on your side that receives every request first, does the generic work, and hands real requests to the app.')}
+        <Toggle label="Reverse proxy in front of the app" info="reverse-proxy" checked={cfg.proxy} onChange={(v) => update({ proxy: v }, `${v ? 'Built' : 'Removed'}: reverse proxy`)} hint="Runs on every app server, e.g. NGINX → localhost:3000" />
+        <Stat k="Requests through proxy" info="rps" v={`${fmt(t.proxy.in)}/s`} />
+        <Stat k="Static files served by proxy" info="static" v={cfg.proxy ? `${fmt(t.proxy.staticServed)}/s` : '—'} />
+        <Stat k="Utilisation" info="utilization" v={cfg.proxy ? pct(t.proxy.rho) : '—'} tone={tone(t.proxy.rho)} />
+        <Stat k="Per-server capacity without" info="cpu" v={`${fmt(plain.cap)} rps (${plain.bound})`} />
+        <Stat k="Per-server capacity with" info="cpu" v={`${fmt(boosted.cap)} rps (${boosted.bound})`} tone="" />
+        <p className="note">Reverse vs forward proxy: this one works for <b>your servers</b> (incoming traffic). A forward proxy works for <b>clients</b> (outgoing traffic), e.g. an office web filter. It doesn’t add capacity, so it isn’t in the simulator. See the Forward Proxy tile on the Network Map.<span className="note-links"><Info term="forward-proxy" label="forward proxy" /></span></p>
+        <div className="sub-label mono">DO YOU NEED ONE?</div>
+        <NeedLists term="reverse-proxy" compact />
+        <Toggle label={cfg.proxy ? 'Reverse proxy is ON. Turn it off' : 'Reverse proxy is OFF. Turn it on'} checked={cfg.proxy} onChange={(v) => update({ proxy: v }, `${v ? 'Built' : 'Removed'}: reverse proxy`)} hint="Flip it and compare the app load, latency and cost." />
+      </div>);
+    }
     case 'app':
       return (<div>{head('App servers', 'Vertical scaling = bigger servers. Horizontal scaling = more servers.')}
         <div className="sub-label mono">VERTICAL · per server<Info term="vertical" label="vertical scaling" /></div>
