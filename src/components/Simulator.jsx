@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CONFIG, RAM_STEPS, SCENARIOS, VCPU_STEPS, advise, compute, findBreakingPoint, fmt, ms, pct, serverCapacity } from '../sim/model.js';
 import SimMap, { STATUS_COLOR } from './SimMap.jsx';
-import { Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.jsx';
+import { Popover, Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.jsx';
 import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js';
 import { Info } from './Glossary.jsx';
 import Methodology from './Methodology.jsx';
@@ -186,15 +186,7 @@ export default function Simulator({ preset }) {
   return (
     <div className="sim">
       <div className="sim-bar">
-        <div className="clock">
-          <span className={`clock-lamp st-${status}`} />
-          <span className="mono clock-t">{clock(sim.t)}</span>
-          <button className="btn" onClick={() => setRunning((v) => !v)}>{running ? '❚❚ Pause' : '▶ Run'}</button>
-          <div className="seg small">
-            {SPEEDS.map((s) => <button key={s.value} className={speed === s.value ? 'on' : ''} onClick={() => setSpeed(s.value)}>{s.label}</button>)}
-          </div>
-          <button className="btn ghost" onClick={resetClock} title="Reset clock">↺</button>
-        </div>
+        <ClockControls status={status} r={r} t={sim.t} running={running} setRunning={setRunning} speed={speed} setSpeed={setSpeed} resetClock={resetClock} cfg={cfg} />
         <div className="kpis">
           <Kpi label="Users online" value={fmt(r.users)} />
           <Kpi label="Offered" info="rps" value={`${fmt(r.raw)}/s`} onClick={() => setMeth('stats')} />
@@ -262,12 +254,7 @@ export default function Simulator({ preset }) {
           </div>
           {fs && (
             <div className="fs-bar">
-              <span className={`clock-lamp st-${status}`} />
-              <span className="mono clock-t">{clock(sim.t)}</span>
-              <button className="btn small" onClick={() => setRunning((v) => !v)}>{running ? '❚❚ Pause' : '▶ Run'}</button>
-              <div className="seg small">
-                {SPEEDS.map((s) => <button key={s.value} className={speed === s.value ? 'on' : ''} onClick={() => setSpeed(s.value)}>{s.label}</button>)}
-              </div>
+              <ClockControls compact status={status} r={r} t={sim.t} running={running} setRunning={setRunning} speed={speed} setSpeed={setSpeed} resetClock={resetClock} cfg={cfg} />
               <button className="btn small danger" onClick={spike}>⚡ Spike</button>
               <div className="kpis">
                 <Kpi label="Users" value={fmt(r.users)} />
@@ -347,6 +334,86 @@ export default function Simulator({ preset }) {
           </ul>
         </section>
       </div>
+    </div>
+  );
+}
+
+const STATUS_TEXT = {
+  green: ['All clear', 'Every component is under 60% load and errors are below 1%.'],
+  amber: ['Getting busy', 'At least one component is at 60–85% load. Latency starts to rise. Plan the next scaling step.'],
+  red: ['Near the limit', 'A component is above 85% load, or more than 1% of requests fail. Users notice slowness.'],
+  broken: ['Failing', 'More than 5% of requests fail. Something is overloaded. Check the dispatcher for fixes.'],
+};
+const PATTERN_TEXT = {
+  steady: 'Steady: traffic stays at the users slider value.',
+  wave: 'Daily wave: one simulated “day” lasts 30 simulated minutes, from 30% to 100% of the users slider.',
+  ramp: 'Viral growth: traffic multiplies over time (up to 60×) until something breaks.',
+  spike: 'Flash sales: every 10 simulated minutes, a 2-minute 5× surge.',
+};
+
+function ClockControls({ compact, status, r, t, running, setRunning, speed, setSpeed, resetClock, cfg }) {
+  const [label, desc] = STATUS_TEXT[status];
+  const t2 = r.tiers;
+  const busiest = [['App servers', t2.app.rho], ['Database (writes)', t2.db.primaryRho], ['Database (reads)', t2.db.readRho], ['Load balancer', t2.lb.on ? t2.lb.rho : 0], ['Cache', t2.cache.on ? t2.cache.rho : 0], ['Queue workers', t2.workers.on ? t2.workers.rho : 0]].sort((a, b) => b[1] - a[1])[0];
+  const perSec = speed * (1000 / TICK_MS);
+  const btn = compact ? 'btn small' : 'btn';
+  return (
+    <div className="clock">
+      <Popover align="start" title="System signal" content={(
+        <>
+          <p><span className="pop-dot" style={{ background: STATUS_COLOR[status] }} /><b>{label}.</b> {desc}</p>
+          <p>Like a railway signal, it sums up the whole system: green &lt; 60% load, amber 60–85%, red &gt; 85% or &gt; 1% errors, flashing red &gt; 5% errors.</p>
+          <span className="pop-live">busiest: {busiest[0]} {pct(busiest[1])} · errors {pct(r.errRate)}</span>
+        </>
+      )}>
+        <button type="button" className="clock-lamp-btn" aria-label={`System status: ${label}`}><span className={`clock-lamp st-${status}`} /></button>
+      </Popover>
+
+      <Popover align="start" title="Simulation clock" width={300} content={(
+        <>
+          <p><b>T+hours:minutes:seconds</b> of simulated time since the run started. Not real time: it runs faster so you can watch hours of traffic in minutes.</p>
+          <p>Traffic patterns, auto-scaling (servers take 60 simulated seconds to boot) and queue backlogs all follow this clock.</p>
+          <span className="pop-live">{PATTERN_TEXT[cfg.pattern]}</span>
+        </>
+      )}>
+        <span className="mono clock-t" tabIndex={0}>{clock(t)}</span>
+      </Popover>
+
+      <Popover title={running ? 'Pause the clock' : 'Run the clock'} content={(
+        <>
+          <p>{running ? 'Freezes simulated time.' : 'Starts simulated time again.'} While paused, traffic patterns, auto-scaling and queue backlogs stop changing, and the charts stop recording.</p>
+          <p>You can still change any setting: the map and numbers update instantly, showing the steady state for that moment.</p>
+        </>
+      )}>
+        <button className={btn} onClick={() => setRunning((v) => !v)}>{running ? '❚❚ Pause' : '▶ Run'}</button>
+      </Popover>
+
+      <Popover title="Simulation speed" width={290} content={(
+        <>
+          <p>How fast simulated time runs compared with real time:</p>
+          <ul>
+            {SPEEDS.map((s) => {
+              const ps = s.value * (1000 / TICK_MS);
+              return <li key={s.value} className={s.value === speed ? 'on' : ''}><b>{s.label}</b>: 1 real second = {ps} simulated seconds{ps >= 60 ? ` (${(ps / 60).toFixed(1)} min)` : ''}</li>;
+            })}
+          </ul>
+          <p>Use 20× to watch a whole daily wave or viral growth quickly, 1× to follow auto-scaling step by step.</p>
+          <span className="pop-live">now: 1 real minute ≈ {Math.round(perSec)} simulated minutes</span>
+        </>
+      )}>
+        <div className="seg small">
+          {SPEEDS.map((s) => <button key={s.value} className={speed === s.value ? 'on' : ''} onClick={() => setSpeed(s.value)} aria-label={`Speed ${s.label}`}>{s.label}</button>)}
+        </div>
+      </Popover>
+
+      <Popover title="Reset clock" width={260} content={(
+        <>
+          <p>Sets the clock back to <b>T+00:00:00</b> and clears the charts, the queue backlog and servers that are still booting.</p>
+          <p>Your layout and settings stay exactly as they are.</p>
+        </>
+      )}>
+        <button className={`${btn} ghost`} onClick={resetClock} aria-label="Reset clock">↺</button>
+      </Popover>
     </div>
   );
 }

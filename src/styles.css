@@ -468,3 +468,24 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
   .meth-table td { display: block; border: 0; padding: 3px 0; }
   .meth-table td:first-child { white-space: normal; }
 }
+
+/* ── popovers ─────────────────────────────────── */
+.pop { position: relative; display: inline-flex; }
+.pop-card { position: absolute; top: calc(100% + 10px); left: 50%; z-index: 70; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: #0b1119; border: 1px solid var(--border2); border-radius: 10px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55); color: var(--text); font: 400 12.5px/1.5 var(--sans); text-align: left; white-space: normal; letter-spacing: normal; text-transform: none; pointer-events: none; opacity: 0; visibility: hidden; transform: translate(-50%, -4px); transition: opacity .12s, transform .12s, visibility 0s linear .12s; }
+.pop-card::before { content: ''; position: absolute; top: -6px; left: 50%; width: 10px; height: 10px; background: #0b1119; border-left: 1px solid var(--border2); border-top: 1px solid var(--border2); transform: translateX(-50%) rotate(45deg); }
+.pop-start .pop-card { left: 0; transform: translate(0, -4px); }
+.pop-start .pop-card::before { left: 16px; }
+.pop:hover .pop-card, .pop:focus-within .pop-card { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: .25s, .25s, 0s; }
+.pop-start:hover .pop-card, .pop-start:focus-within .pop-card { transform: translate(0, 0); }
+.pop-title { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--blue); }
+.pop-body p { margin: 0 0 5px; }
+.pop-body p:last-child { margin-bottom: 0; }
+.pop-body b { color: #fff; font-weight: 600; }
+.pop-body ul { margin: 2px 0 4px; padding-left: 16px; }
+.pop-body li { margin: 2px 0; }
+.pop-body li.on { color: var(--green); }
+.pop-live { display: block; margin-top: 2px; padding: 5px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); font: 11px var(--mono); color: var(--dim); }
+.pop-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.clock-lamp-btn { display: inline-flex; padding: 4px; border: 0; background: none; cursor: help; border-radius: 50%; }
+.clock-t[tabindex] { cursor: help; }
+@media (hover: none) { .pop-card { display: none; } .pop:focus-within .pop-card { display: flex; } }

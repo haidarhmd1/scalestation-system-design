@@ -80,3 +80,16 @@ export function Sparkline({ series, height = 54, max, label, value, unit, info }
     </div>
   );
 }
+
+// Hover / keyboard-focus popover. `align` keeps cards on screen near edges.
+export function Popover({ title, content, children, align = 'center', width = 280 }) {
+  return (
+    <span className={`pop pop-${align}`}>
+      {children}
+      <span role="tooltip" className="pop-card" style={{ width }}>
+        {title && <span className="pop-title mono">{title}</span>}
+        <span className="pop-body">{content}</span>
+      </span>
+    </span>
+  );
+}
