@@ -409,3 +409,23 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .foot-links a:hover { border-color: var(--blue); background: var(--panel2); }
 .foot-links a .mono { font-size: 11px; }
 @media (max-width: 600px) { .site-foot { padding: 16px; } }
+
+/* ── dropdowns: custom chevron with breathing room ── */
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding: 8px 34px 8px 10px;
+  background-color: var(--bg2);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%237d8a99' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: border-color .15s;
+}
+.select:hover { border-color: #3a4a5e; }
+.select:focus-visible { border-color: var(--blue); outline: none; box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.25); }
+.select option { background: var(--bg2); color: var(--text); }
