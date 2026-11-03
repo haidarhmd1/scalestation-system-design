@@ -4,10 +4,11 @@ import FlowDiagram from './FlowDiagram.jsx';
 import { NeedLists, useGlossary } from './Glossary.jsx';
 import { GLOSSARY, termsIn } from '../data/glossary.js';
 
-export default function Catalogue({ onTrySim }) {
+export default function Catalogue({ onTrySim, openRequest, onBuild }) {
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState('All');
   const [openId, setOpenId] = useState(null);
+  useEffect(() => { if (openRequest?.id) setOpenId(openRequest.id); }, [openRequest]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -23,6 +24,7 @@ export default function Catalogue({ onTrySim }) {
           <div className="eyebrow mono">NETWORK MAP · {PATTERNS.length} STATIONS · 5 LINES</div>
           <h1>Learn system design by building, scaling and breaking it.</h1>
           <p className="lede">Ride from a single server to planet-scale databases. Each station is a pattern: click it to watch a request travel through the system step by step, then try it in the <b>Simulator</b>.</p>
+          {onBuild && <button className="btn primary build-cta" onClick={onBuild}>Ready to build it yourself? Start the Build Your Own track →</button>}
         </div>
         <div className="legend">
           {LEVELS.map((l) => (
