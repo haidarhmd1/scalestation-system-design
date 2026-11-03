@@ -1,10 +1,10 @@
-# ScaleYard: System Design Simulator
+# ScaleStation: System Design Simulator
 
 **Learn system design by building, scaling and breaking it.**
 
-ScaleYard is a self-hosted, dark-mode playground for learning system design, from a single server all the way to planet-scale architectures. Read how each pattern works, watch a request travel through it step by step, then build your own system in a live simulator, push traffic at it and see exactly where it breaks and what to add next.
+ScaleStation is a self-hosted, dark-mode playground for learning system design, from a single server all the way to planet-scale architectures. Read how each pattern works, watch a request travel through it step by step, then build your own system in a live simulator, push traffic at it and see exactly where it breaks and what to add next.
 
-The look is inspired by railway yards and signalling: requests travel like trains along tracks, every component is a station with a signal light, and patterns are grouped into "lines" from simple to complex.
+The look is inspired by railway stations and signalling: requests travel like trains along tracks, every component is a station with a signal light, and patterns are grouped into "lines" from simple to complex.
 
 > Built for beginners and for anyone preparing for system design interviews. Every technical word has an ⓘ that explains it in plain language.
 
@@ -52,8 +52,8 @@ From CPU and RAM to sharding, backpressure and circuit breakers. Each entry cove
 Requires [Node.js](https://nodejs.org/) 18 or newer.
 
 ```bash
-git clone https://github.com/haidarhmd1/scaleyard-system-design.git
-cd scaleyard-system-design
+git clone https://github.com/haidarhmd1/scalestation-system-design.git
+cd scalestation-system-design
 npm install
 npm run dev
 ```
