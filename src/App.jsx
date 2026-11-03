@@ -32,8 +32,8 @@ export default function App() {
       <nav className="topnav">
         <div className="brand">
           <span className="brand-signal"><i /><i /><i /></span>
-          <span className="brand-name">SIGNAL BOX</span>
-          <span className="brand-sub mono">system design atlas</span>
+          <span className="brand-name">SCALEYARD</span>
+          <span className="brand-sub mono">system design simulator</span>
         </div>
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'atlas'} className={tab === 'atlas' ? 'on' : ''} onClick={() => go('atlas')}>

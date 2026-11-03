@@ -39,8 +39,8 @@ export default function Simulator({ preset }) {
   const [fs, setFs] = useState(false);
   const [fsInsp, setFsInsp] = useState(true);
   const [meth, setMeth] = useState(null);
-  const [leftOpen, setLeftOpen] = usePersisted('signalbox.leftOpen', true);
-  const [rightOpen, setRightOpen] = usePersisted('signalbox.rightOpen', true);
+  const [leftOpen, setLeftOpen] = usePersisted('scaleyard.leftOpen', true);
+  const [rightOpen, setRightOpen] = usePersisted('scaleyard.rightOpen', true);
   const closeMeth = useCallback(() => setMeth(null), []);
 
   // Full screen: the whole page goes full screen (so glossary pop-ups still show)
@@ -344,7 +344,7 @@ export default function Simulator({ preset }) {
           </ul>
         </section>
         <section className="panel log">
-          <div className="panel-label mono">SIGNAL BOX LOG</div>
+          <div className="panel-label mono">YARD LOG · EVENTS</div>
           <ul>
             {sim.log.map((l) => (
               <li key={l.id} className={`log-${l.kind}`}><span className="mono dim">{clock(l.t)}</span> {l.msg}</li>
