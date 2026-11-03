@@ -69,7 +69,7 @@ function GlossaryModal({ id, canBack, onBack, onOpen, onClose }) {
         <header className="gl-head">
           <div className="gl-nav">
             {canBack && <button className="btn ghost small" onClick={onBack}>← Back</button>}
-            <span className="mono dim">GLOSSARY{isIndex ? '' : ' · EXPLAINED FOR BEGINNERS'}</span>
+            <span className="mono dim">GLOSSARY{isIndex ? '' : ' · EXPLANATION'}</span>
           </div>
           <button className="btn ghost small" onClick={onClose} aria-label="Close">✕</button>
         </header>

@@ -5,6 +5,7 @@ import { Popover, Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.
 import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js';
 import { Info } from './Glossary.jsx';
 import Methodology from './Methodology.jsx';
+import { termsIn } from '../data/glossary.js';
 
 const TICK_MS = 250;
 const SPEEDS = [{ value: 2, label: '1×' }, { value: 10, label: '5×' }, { value: 40, label: '20×' }];
@@ -189,13 +190,13 @@ export default function Simulator({ preset }) {
         <ClockControls status={status} r={r} t={sim.t} running={running} setRunning={setRunning} speed={speed} setSpeed={setSpeed} resetClock={resetClock} cfg={cfg} />
         <div className="kpis">
           <Kpi label="Users online" value={fmt(r.users)} />
-          <Kpi label="Offered" info="rps" value={`${fmt(r.raw)}/s`} onClick={() => setMeth('stats')} />
-          <Kpi label="Served OK" info="rps" value={`${fmt(r.served)}/s`} onClick={() => setMeth('stats')} />
-          <Kpi label="Errors" info="errorrate" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} onClick={() => setMeth('stats')} />
-          <Kpi label="p95 latency" info="p95" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} onClick={() => setMeth('stats')} />
-          <Kpi label="Uptime est." info="availability" value={`${(r.avail * 100).toFixed(r.avail > 0.9999 ? 3 : 2)}%`} onClick={() => setMeth('stats')} />
-          <Kpi label="Cost / month" value={`$${fmt(r.costHr * 730)}`} onClick={() => setMeth('cost')} hint="See breakdown" />
-          <button className="btn small how-btn" onClick={() => setMeth('stats')}><span className="info static">?</span>How is this calculated?</button>
+          <Kpi label="Offered" info="rps" value={`${fmt(r.raw)}/s`} />
+          <Kpi label="Served OK" info="rps" value={`${fmt(r.served)}/s`} />
+          <Kpi label="Errors" info="errorrate" value={pct(r.errRate)} tone={r.errRate > 0.05 ? 'bad' : r.errRate > 0.01 ? 'warn' : 'good'} />
+          <Kpi label="p95 latency" info="p95" value={ms(r.p95)} tone={r.p95 > 1000 ? 'bad' : r.p95 > 400 ? 'warn' : 'good'} />
+          <Kpi label="Uptime est." info="availability" value={`${(r.avail * 100).toFixed(r.avail > 0.9999 ? 3 : 2)}%`} />
+          <Kpi label="Cost / month" value={`$${fmt(r.costHr * 730)}`} />
+          <button className="btn small how-btn" onClick={() => setMeth('cost')}><span className="info static">?</span>How is this calculated?</button>
         </div>
       </div>
 
@@ -316,10 +317,15 @@ export default function Simulator({ preset }) {
             {advice.slice(0, 6).map((a, i) => (
               <li key={i} className={`adv sev-${a.severity}`}>
                 <div>
-                  <div className="adv-title"><span className="adv-sev mono">{a.severity}</span>{a.title}</div>
+                  <div className="adv-title"><span className="adv-sev mono">{a.severity}</span>{a.title}<Info term={termsIn(a.title)[0] || termsIn(`${a.detail} ${a.fix?.label || ''}`)[0]} label={a.title} /></div>
                   <div className="adv-detail">{a.detail}</div>
                 </div>
-                {a.fix && <button className="btn small primary" onClick={() => update(a.fix.patch, `Dispatcher fix: ${a.fix.label}`)}>{a.fix.label}</button>}
+                {a.fix && (
+                  <span className="adv-fix">
+                    <button className="btn small primary" onClick={() => update(a.fix.patch, `Dispatcher fix: ${a.fix.label}`)}>{a.fix.label}</button>
+                    {/SPOF/.test(a.fix.label) && <Info term="spof" label="SPOF" />}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -553,7 +559,7 @@ function Inspector({ id, cfg, r, update, sim }) {
           <Slider label="Target CPU" info="utilization" min={30} max={90} value={cfg.asTarget} display={`${cfg.asTarget}%`} onChange={(v) => update({ asTarget: v })} />
         </>)}
         <Segmented label="Session storage" info="session" value={cfg.sessions} onChange={(v) => update({ sessions: v }, `Sessions → ${v}`)}
-          options={[{ value: 'memory', label: 'In memory' }, { value: 'sticky', label: 'Sticky LB' }, { value: 'shared', label: 'Shared Redis' }]} />
+          options={[{ value: 'memory', label: 'In memory', info: 'session-memory' }, { value: 'sticky', label: 'Sticky LB', info: 'sticky' }, { value: 'shared', label: 'Shared Redis', info: 'session-shared' }]} />
         <Toggle label="Circuit breakers" info="breaker" checked={cfg.breaker} onChange={(v) => update({ breaker: v }, `${v ? 'Built' : 'Removed'}: circuit breakers`)} hint="Fail fast when the DB is overloaded" />
         <Stat k="Per-server capacity" info="bottleneck" v={`${fmt(sc.cap)} rps (${sc.bound}-bound)`} />
         <Stat k="Fleet capacity" v={`${fmt(t.app.cap)} rps`} />

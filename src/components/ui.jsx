@@ -42,8 +42,13 @@ export function Segmented({ options, value, onChange, label, info }) {
         {options.map((o) => {
           const v = typeof o === 'object' ? o.value : o;
           const l = typeof o === 'object' ? o.label : o;
+          const term = typeof o === 'object' ? o.info : null;
+          if (!term) return <button key={v} type="button" className={v === value ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>;
           return (
-            <button key={v} type="button" className={v === value ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>
+            <span key={v} className="seg-opt">
+              <button type="button" className={v === value ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>
+              <Info term={term} label={l} />
+            </span>
           );
         })}
       </div>
