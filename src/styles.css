@@ -516,3 +516,32 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .need-col.no h3 { color: #ff8a8b; }
 @media (max-width: 700px) { .need { grid-template-columns: 1fr; } }
 
+
+/* ── collapsible sidebars ─────────────────────── */
+.sim-grid { transition: grid-template-columns .2s ease; }
+.sim-grid.l-closed { grid-template-columns: 44px minmax(0, 1fr) 300px; }
+.sim-grid.r-closed { grid-template-columns: 270px minmax(0, 1fr) 44px; }
+.sim-grid.l-closed.r-closed { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+.sim-left, .sim-right { position: sticky; }
+.side-collapse { position: absolute; top: 9px; right: 9px; z-index: 2; width: 26px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--border2); background: var(--panel2); color: var(--dim); cursor: pointer; font-size: 14px; line-height: 1; }
+.side-collapse:hover { color: var(--text); border-color: var(--blue); }
+.panel.collapsed { padding: 0; overflow: hidden; }
+.side-rail { width: 100%; min-height: 240px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; border: 0; background: transparent; color: var(--dim); cursor: pointer; border-radius: 12px; }
+.side-rail:hover { background: var(--panel2); color: var(--text); }
+.side-rail-arrow { font-size: 15px; color: var(--blue); }
+.side-rail-text { writing-mode: vertical-rl; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }
+.side-rail.left .side-rail-text { transform: rotate(180deg); }
+
+@media (max-width: 1280px) {
+  .sim-grid.l-closed, .sim-grid.l-closed.r-closed { grid-template-columns: 44px minmax(0, 1fr); }
+  .sim-grid.r-closed { grid-template-columns: 250px minmax(0, 1fr); }
+  .sim-right { position: relative; }
+  .sim-right .side-rail { min-height: 0; flex-direction: row; justify-content: center; padding: 10px 14px; }
+  .sim-right .side-rail-text { writing-mode: horizontal-tb; }
+}
+@media (max-width: 960px) {
+  .sim-grid.l-closed, .sim-grid.r-closed, .sim-grid.l-closed.r-closed { grid-template-columns: 1fr; }
+  .sim-left { position: relative; }
+  .side-rail { min-height: 0; flex-direction: row; justify-content: center; padding: 10px 14px; }
+  .side-rail-text, .side-rail.left .side-rail-text { writing-mode: horizontal-tb; transform: none; }
+}

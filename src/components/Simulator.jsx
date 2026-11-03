@@ -39,6 +39,8 @@ export default function Simulator({ preset }) {
   const [fs, setFs] = useState(false);
   const [fsInsp, setFsInsp] = useState(true);
   const [meth, setMeth] = useState(null);
+  const [leftOpen, setLeftOpen] = usePersisted('signalbox.leftOpen', true);
+  const [rightOpen, setRightOpen] = usePersisted('signalbox.rightOpen', true);
   const closeMeth = useCallback(() => setMeth(null), []);
 
   // Full screen: the whole page goes full screen (so glossary pop-ups still show)
@@ -200,8 +202,12 @@ export default function Simulator({ preset }) {
         </div>
       </div>
 
-      <div className="sim-grid">
-        <aside className="panel sim-left">
+      <div className={`sim-grid ${leftOpen ? '' : 'l-closed'} ${rightOpen ? '' : 'r-closed'}`}>
+        <aside className={`panel sim-left ${leftOpen ? '' : 'collapsed'}`} aria-label="Controls">
+          {!leftOpen ? (
+            <SideRail side="left" label="Controls" sub="traffic · build" onOpen={() => setLeftOpen(true)} />
+          ) : (<>
+          <button className="side-collapse" onClick={() => setLeftOpen(false)} aria-label="Collapse controls panel" title="Collapse panel">«</button>
           <div className="panel-label mono">SCENARIO</div>
           <select className="select" value="" onChange={(e) => loadScenario(e.target.value)}>
             <option value="">Load a scenario…</option>
@@ -243,6 +249,7 @@ export default function Simulator({ preset }) {
             ))}
           </div>
           <Segmented info="region" label="Regions (multi-region active-active)" value={cfg.regions} onChange={(v) => update({ regions: v }, `Regions → ${v}`)} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} />
+          </>)}
         </aside>
 
         <main className={`panel sim-center ${fs ? 'fs' : ''}`}>
@@ -287,8 +294,13 @@ export default function Simulator({ preset }) {
           {!H.length && <p className="dim small center">Press ▶ Run to start the clock and record history.</p>}
         </main>
 
-        <aside className="panel sim-right">
-          <Inspector id={selected} cfg={cfg} r={r} update={update} sim={sim} />
+        <aside className={`panel sim-right ${rightOpen ? '' : 'collapsed'}`} aria-label="Station inspector">
+          {!rightOpen ? (
+            <SideRail side="right" label="Inspector" sub={{ users: 'Users', dns: 'DNS', cdn: 'CDN', gateway: 'Gateway', lb: 'Load balancer', proxy: 'Reverse proxy', app: 'App servers', cache: 'Cache', db: 'Database', queue: 'Queue', workers: 'Workers' }[selected]} onOpen={() => setRightOpen(true)} />
+          ) : (<>
+            <button className="side-collapse" onClick={() => setRightOpen(false)} aria-label="Collapse inspector panel" title="Collapse panel">»</button>
+            <Inspector id={selected} cfg={cfg} r={r} update={update} sim={sim} />
+          </>)}
         </aside>
       </div>
 
@@ -422,6 +434,31 @@ function ClockControls({ compact, status, r, t, running, setRunning, speed, setS
         <button className={`${btn} ghost`} onClick={resetClock} aria-label="Reset clock">↺</button>
       </Popover>
     </div>
+  );
+}
+
+// Boolean state remembered in this browser (falls back to the default if storage is blocked).
+function usePersisted(key, initial) {
+  const [v, setV] = useState(() => {
+    try {
+      const s = localStorage.getItem(key);
+      return s === null ? initial : s === '1';
+    } catch { return initial; }
+  });
+  const set = useCallback((next) => {
+    setV(next);
+    try { localStorage.setItem(key, next ? '1' : '0'); } catch { /* storage unavailable */ }
+  }, [key]);
+  return [v, set];
+}
+
+// Slim strip shown in place of a collapsed sidebar.
+function SideRail({ side, label, sub, onOpen }) {
+  return (
+    <button className={`side-rail ${side}`} onClick={onOpen} aria-expanded="false" aria-label={`Expand ${label.toLowerCase()} panel`} title={`Expand ${label.toLowerCase()}`}>
+      <span className="side-rail-arrow" aria-hidden="true">{side === 'left' ? '»' : '«'}</span>
+      <span className="side-rail-text mono">{label}{sub ? <span className="dim"> · {sub}</span> : null}</span>
+    </button>
   );
 }
 
