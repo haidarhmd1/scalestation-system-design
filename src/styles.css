@@ -399,3 +399,13 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
   .fs-insp-open { top: auto; bottom: 8px; }
   .sim-center.fs .charts { display: none; }
 }
+
+/* ── footer ───────────────────────────────────── */
+.site-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; max-width: 1800px; margin: 24px auto 0; padding: 18px 24px 28px; border-top: 1px solid var(--border); color: var(--dim); font-size: 13px; }
+.foot-brand { display: flex; align-items: center; gap: 10px; }
+.foot-brand b { color: var(--text); font-weight: 600; }
+.foot-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.foot-links a { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border: 1px solid var(--border2); border-radius: 8px; background: var(--panel); color: var(--text); transition: border-color .15s, background .15s; }
+.foot-links a:hover { border-color: var(--blue); background: var(--panel2); }
+.foot-links a .mono { font-size: 11px; }
+@media (max-width: 600px) { .site-foot { padding: 16px; } }
