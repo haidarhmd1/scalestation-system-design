@@ -1323,7 +1323,7 @@ variable "db_password" {
 
 variable "public_port" {
   type    = number
-  default = 8081
+  default = 8090
 }
 
 locals {
@@ -1816,7 +1816,7 @@ export const STEPS = [
     tasks: [
       'Install {{TOOL}} and stop the Compose stack (docker compose down)',
       'Add the infra/ files, then run {{tf}} init and {{tf}} plan',
-      'Run {{tf}} apply and call http://localhost:8081',
+      'Run {{tf}} apply and call http://localhost:8090',
       'Change app_replicas to 5, plan and apply again; then delete a container by hand and watch plan detect the drift',
       'Finish with {{tf}} destroy',
     ],
@@ -1838,8 +1838,8 @@ export const STEPS = [
       ],
     },
     verify: [
-      'for i in 1 2 3 4 5 6; do curl -s http://localhost:8081/; echo; done',
-      '{{tf}} apply -var app_replicas=5      # plan shows 2 servers to add, NGINX to update',
+      'for i in 1 2 3 4 5 6; do curl -s http://localhost:8090/; echo; done',
+      '{{tf}} apply -var app_replicas=5      # plan: 2 new servers, and NGINX is replaced with the new server list',
       'docker rm -f iac-app-1                 # someone deletes a server by hand…',
       '{{tf}} plan                            # …and plan detects the drift',
       '{{tf}} apply                           # put it back',
