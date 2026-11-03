@@ -3,7 +3,7 @@ import { DEFAULT_CONFIG, RAM_STEPS, SCENARIOS, VCPU_STEPS, advise, compute, find
 import SimMap, { STATUS_COLOR } from './SimMap.jsx';
 import { Popover, Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.jsx';
 import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js';
-import { Info, NeedLists } from './Glossary.jsx';
+import { Info, NeedLists, Term } from './Glossary.jsx';
 import Methodology from './Methodology.jsx';
 import { termsIn } from '../data/glossary.js';
 
@@ -614,6 +614,11 @@ function Inspector({ id, cfg, r, update, sim }) {
         </>)}
         <Segmented label="Session storage" info="session" value={cfg.sessions} onChange={(v) => update({ sessions: v }, `Sessions → ${v}`)}
           options={[{ value: 'memory', label: 'In memory', info: 'session-memory' }, { value: 'sticky', label: 'Sticky LB', info: 'sticky' }, { value: 'shared', label: 'Shared Redis', info: 'session-shared' }]} />
+        <p className="field-hint state-hint">
+          {cfg.sessions === 'shared'
+            ? <>Your app servers are <Term term="stateless">stateless</Term>: any server can handle any request.</>
+            : <>Your app servers are <Term term="stateful">stateful</Term>: users depend on one server’s memory.</>}
+        </p>
         <Toggle label="Circuit breakers" info="breaker" checked={cfg.breaker} onChange={(v) => update({ breaker: v }, `${v ? 'Built' : 'Removed'}: circuit breakers`)} hint="Fail fast when the DB is overloaded" />
         <Stat k="Per-server capacity" info="bottleneck" v={`${fmt(sc.cap)} rps (${sc.bound}-bound)`} />
         <Stat k="Fleet capacity" v={`${fmt(t.app.cap)} rps`} />
