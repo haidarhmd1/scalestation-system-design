@@ -429,3 +429,42 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .select:hover { border-color: #3a4a5e; }
 .select:focus-visible { border-color: var(--blue); outline: none; box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.25); }
 .select option { background: var(--bg2); color: var(--text); }
+
+/* ── "How is this calculated?" panel ─────────── */
+.kpi.clickable { cursor: pointer; border-radius: 0 6px 6px 0; transition: background .15s; }
+.kpi.clickable:hover { background: var(--panel2); }
+.kpi-hint { font-size: 11px; color: var(--blue); }
+.how-btn { display: inline-flex; align-items: center; align-self: center; margin-left: 6px; }
+.gl.meth { width: min(980px, 100%); }
+.meth-tabs { flex-wrap: wrap; }
+.meth-tabs button { padding: 6px 12px; }
+.cost-list { display: grid; gap: 8px; margin: 14px 0 20px; }
+.cost-row { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; }
+.cost-row.off { opacity: 0.5; }
+.cost-row.total { border-color: #1f6b44; background: #0f1f17; }
+.cost-top { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; font-weight: 600; }
+.cost-top b { color: var(--green); }
+.cost-row.off .cost-top b { color: var(--dim); font-weight: 500; }
+.cost-bar { height: 4px; background: #1b232d; border-radius: 4px; margin: 7px 0 6px; overflow: hidden; }
+.cost-bar i { display: block; height: 100%; background: var(--blue); border-radius: 4px; }
+.cost-calc { font-size: 11px; color: var(--dim); line-height: 1.5; word-break: break-word; }
+.meth-h { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--blue); margin: 20px 0 8px; }
+.meth-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.meth-table th { text-align: left; font: 600 10.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); padding: 6px 8px; border-bottom: 1px solid var(--border2); }
+.meth-table td { vertical-align: top; padding: 8px; border-bottom: 1px solid var(--border); line-height: 1.5; }
+.meth-table td:first-child { font-weight: 600; white-space: nowrap; }
+.meth-table td.mono { font-size: 11.5px; color: #9ccaff; min-width: 150px; }
+.meth-list { margin: 0; padding-left: 18px; font-size: 13px; color: var(--dim); }
+.meth-list li { margin: 4px 0; }
+.meth-stat { border: 1px solid var(--border); background: var(--panel); border-radius: 10px; padding: 11px 13px; margin: 10px 0; }
+.meth-stat-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.meth-stat h3 { font-size: 15px; }
+.meth-stat-top b { color: var(--green); font-size: 13px; text-align: right; }
+.meth-formula { margin: 8px 0 6px; padding: 7px 10px; background: #07090c; border: 1px solid var(--border); border-radius: 7px; font-size: 11.5px; color: var(--amber); line-height: 1.5; word-break: break-word; }
+.meth-stat p { margin: 0; font-size: 13px; color: var(--dim); }
+@media (max-width: 700px) {
+  .meth-table thead { display: none; }
+  .meth-table tr { display: block; border-bottom: 1px solid var(--border2); padding: 6px 0; }
+  .meth-table td { display: block; border: 0; padding: 3px 0; }
+  .meth-table td:first-child { white-space: normal; }
+}

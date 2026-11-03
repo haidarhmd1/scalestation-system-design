@@ -49,6 +49,29 @@ const GW_CAP = 250000;
 const CACHE_CAP_PER_32GB = 120000;
 const WORKER_RPS = 500;
 
+// Unit prices in USD, approximating public cloud on-demand list prices
+// (AWS us-east-1 style, 2024–2025). Shown in the "How is this calculated?" panel.
+export const PRICES = {
+  HOURS_PER_MONTH: 730,
+  vcpuHr: 0.034, // app server per vCPU-hour
+  ramGbHr: 0.0045, // app server per GB-RAM-hour
+  lbNodeHr: 0.025, // per load balancer node-hour
+  lbPerMReq: 0.008, // per million requests through the LB
+  gwHr: 0.03, // gateway fixed per region-hour
+  gwPerMReq: 0.1, // per million requests through the gateway
+  cdnPerMReq: 0.08, // per million CDN requests (flat-rate-plan style)
+  cacheGbHr: 0.017, // per GB of managed cache per hour
+  dbVcpuHr: 0.07, // managed DB per vCPU-hour
+  dbRamGbHr: 0.01, // managed DB per GB-RAM-hour
+  poolerHr: 0.05, // connection pooler per shard-hour
+  queueHr: 0.05, // queue base per hour
+  queuePerMMsg: 0.4, // per million messages
+  workerHr: 0.05, // per worker-hour
+};
+
+// Capacity & latency assumptions, also shown in the panel.
+export const ASSUMPTIONS = { PER_CORE_RPS, RPS_PER_GB, LB_NODE_CAP, GW_CAP, CACHE_CAP_PER_32GB, WORKER_RPS };
+
 export function serverCapacity(vcpu, ram) {
   const cpu = Math.pow(vcpu, 0.9) * PER_CORE_RPS;
   const mem = Math.max(0, ram - 0.5) * RPS_PER_GB;
@@ -227,17 +250,30 @@ export function compute(cfg, rt = {}) {
   if (R === 1) spofs.push('Single region');
 
   // Cost ($/hr)
+  const P = PRICES;
   const totalServers = activeServers * R;
-  const cost = {
-    servers: (0.034 * cfg.vcpu + 0.0045 * cfg.ram) * totalServers,
-    lb: cfg.lb ? 0.025 * cfg.lbNodes * R + (appIn * 3600 / 1e6) * 0.008 : 0,
-    gateway: cfg.gateway ? 0.03 * R + (gwIn * 3600 / 1e6) * 0.1 : 0,
-    cdn: cfg.cdn ? (cdnIn * 3600 / 1e6) * 0.08 : 0,
-    cache: cfg.cache ? cfg.cacheGb * 0.017 * R : 0,
-    db: (0.07 * cfg.dbVcpu + 0.01 * cfg.dbRam) * S * (1 + Rp * R) + (cfg.pooler ? 0.05 * S : 0),
-    queue: cfg.queue ? 0.05 + (d.writes * 3600 / 1e6) * 0.4 + cfg.workers * 0.05 : 0,
-  };
-  const costHr = Object.values(cost).reduce((a, b) => a + b, 0);
+  const mPerHr = (rps) => (rps * 3600) / 1e6; // millions of requests per hour
+  const serverHr = P.vcpuHr * cfg.vcpu + P.ramGbHr * cfg.ram;
+  const dbNodeHr = P.dbVcpuHr * cfg.dbVcpu + P.dbRamGbHr * cfg.dbRam;
+  const dbNodes = S * (1 + Rp * R);
+  const costItems = [
+    { id: 'servers', label: 'App servers', on: true, hr: serverHr * totalServers,
+      calc: `${totalServers} server${totalServers > 1 ? 's' : ''} × ($${P.vcpuHr}/vCPU·h × ${cfg.vcpu} vCPU + $${P.ramGbHr}/GB·h × ${cfg.ram} GB) = $${serverHr.toFixed(3)}/h each` },
+    { id: 'lb', label: 'Load balancer', on: cfg.lb, hr: cfg.lb ? P.lbNodeHr * cfg.lbNodes * R + mPerHr(appIn) * P.lbPerMReq : 0,
+      calc: `${cfg.lbNodes * R} node${cfg.lbNodes * R > 1 ? 's' : ''} × $${P.lbNodeHr}/h + ${fmt(mPerHr(appIn))}M req/h × $${P.lbPerMReq}/M` },
+    { id: 'gateway', label: 'API gateway / rate limiter', on: cfg.gateway, hr: cfg.gateway ? P.gwHr * R + mPerHr(gwIn) * P.gwPerMReq : 0,
+      calc: `${R} region${R > 1 ? 's' : ''} × $${P.gwHr}/h + ${fmt(mPerHr(gwIn))}M req/h × $${P.gwPerMReq}/M` },
+    { id: 'cdn', label: 'CDN', on: cfg.cdn, hr: cfg.cdn ? mPerHr(cdnIn) * P.cdnPerMReq : 0,
+      calc: `${fmt(mPerHr(cdnIn))}M req/h × $${P.cdnPerMReq}/M` },
+    { id: 'cache', label: 'Cache', on: cfg.cache, hr: cfg.cache ? cfg.cacheGb * P.cacheGbHr * R : 0,
+      calc: `${cfg.cacheGb} GB × ${R} region${R > 1 ? 's' : ''} × $${P.cacheGbHr}/GB·h` },
+    { id: 'db', label: 'Database', on: true, hr: dbNodeHr * dbNodes + (cfg.pooler ? P.poolerHr * S : 0),
+      calc: `${dbNodes} node${dbNodes > 1 ? 's' : ''} (${S} shard${S > 1 ? 's' : ''} × (1 primary + ${Rp} replica${Rp === 1 ? '' : 's'} × ${R} region${R > 1 ? 's' : ''})) × ($${P.dbVcpuHr}/vCPU·h × ${cfg.dbVcpu} + $${P.dbRamGbHr}/GB·h × ${cfg.dbRam})${cfg.pooler ? ` + pooler ${S} × $${P.poolerHr}/h` : ''}` },
+    { id: 'queue', label: 'Queue + workers', on: cfg.queue, hr: cfg.queue ? P.queueHr + mPerHr(d.writes) * P.queuePerMMsg + cfg.workers * P.workerHr : 0,
+      calc: `$${P.queueHr}/h + ${fmt(mPerHr(d.writes))}M msg/h × $${P.queuePerMMsg}/M + ${cfg.workers} workers × $${P.workerHr}/h` },
+  ];
+  const cost = Object.fromEntries(costItems.map((c) => [c.id, c.hr]));
+  const costHr = costItems.reduce((a, c) => a + c.hr, 0);
 
   const tiers = {
     users: { label: 'Users', in: raw, cap: Infinity, rho: 0, lat: net },
@@ -277,7 +313,7 @@ export function compute(cfg, rt = {}) {
   };
 
   return {
-    users, raw, bot, blocked, legit, served, errors, errRate, p50, p95, avail, spofs, cost, costHr,
+    users, raw, bot, blocked, legit, served, errors, errRate, p50, p95, avail, spofs, cost, costHr, costItems,
     tiers, flows, edgeErr, maxRho, botPass,
   };
 }
