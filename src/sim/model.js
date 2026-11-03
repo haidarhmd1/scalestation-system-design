@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG = {
   regions: 1,
   cdn: false,
   gateway: false,
+  proxy: false,
   lb: false,
   lbNodes: 1,
   lbAlgo: 'round-robin',
@@ -67,14 +68,22 @@ export const PRICES = {
   queueHr: 0.05, // queue base per hour
   queuePerMMsg: 0.4, // per million messages
   workerHr: 0.05, // per worker-hour
+  proxyServerHr: 0.004, // reverse proxy CPU share per app server-hour
 };
 
 // Capacity & latency assumptions, also shown in the panel.
 export const ASSUMPTIONS = { PER_CORE_RPS, RPS_PER_GB, LB_NODE_CAP, GW_CAP, CACHE_CAP_PER_32GB, WORKER_RPS };
 
-export function serverCapacity(vcpu, ram) {
-  const cpu = Math.pow(vcpu, 0.9) * PER_CORE_RPS;
-  const mem = Math.max(0, ram - 0.5) * RPS_PER_GB;
+// A reverse proxy in front of the app offloads TLS + compression (+15% CPU
+// headroom) and buffers slow clients so memory is freed sooner (+30%).
+export const PROXY_CPU_BOOST = 1.15;
+export const PROXY_MEM_BOOST = 1.3;
+export const PROXY_NODE_CAP = 12000; // static/proxy req/s per server
+export const PROXY_STATIC_SHARE = 0.9; // static requests served by the proxy
+
+export function serverCapacity(vcpu, ram, proxy = false) {
+  const cpu = Math.pow(vcpu, 0.9) * PER_CORE_RPS * (proxy ? PROXY_CPU_BOOST : 1);
+  const mem = Math.max(0, ram - 0.5) * RPS_PER_GB * (proxy ? PROXY_MEM_BOOST : 1);
   return { cap: Math.min(cpu, mem), cpu, mem, bound: cpu <= mem ? 'CPU' : 'RAM' };
 }
 
@@ -135,10 +144,14 @@ export function compute(cfg, rt = {}) {
   const staticShare = gwIn ? originStatic / gwIn : 0;
   const appStatic = appIn * staticShare;
   const appDyn = appIn - appStatic;
-  const appWork = appDyn + appStatic * 0.3;
+  // Reverse proxy (one per app server) serves most static files itself
+  const proxyStatic = cfg.proxy ? appStatic * PROXY_STATIC_SHARE : 0;
+  const proxyCap = cfg.proxy ? PROXY_NODE_CAP * effServers : Infinity;
+  const appBound = appIn - proxyStatic;
+  const appWork = appDyn + (appStatic - proxyStatic) * 0.3;
 
   // App tier
-  const sc = serverCapacity(cfg.vcpu, cfg.ram);
+  const sc = serverCapacity(cfg.vcpu, cfg.ram, cfg.proxy);
   const sticky = cfg.sessions === 'sticky' || (cfg.lb && cfg.lbAlgo === 'ip-hash');
   const balance = effServers > 1 ? (sticky ? 0.85 : cfg.lbAlgo === 'least-conn' ? 1.04 : 1) : 1;
   const appCapBase = effServers * sc.cap * balance;
@@ -186,7 +199,7 @@ export function compute(cfg, rt = {}) {
   }
   const appCap = appCapBase / cascade;
   const appRho = appCap > 0 ? appWork / appCap : Infinity;
-  const appErr = appIn * (1 - appFrac);
+  const appErr = appBound * (1 - appFrac);
 
   // Connections
   const perServer = 25;
@@ -215,7 +228,7 @@ export function compute(cfg, rt = {}) {
     ? d.dynServed * 0.35 * (1 - 1 / effServers)
     : 0;
 
-  const served = Math.max(0, cdnServed + appIn * appFrac - dataErr - sessErr - queueErr);
+  const served = Math.max(0, cdnServed + proxyStatic + appBound * appFrac - dataErr - sessErr - queueErr);
   const errors = gwErr + lbErr + appErr + dataErr + queueErr + sessErr;
   const attempted = raw - blocked;
   const errRate = attempted > 0 ? Math.min(1, errors / attempted) : 0;
@@ -226,8 +239,8 @@ export function compute(cfg, rt = {}) {
   const dbReadLat = (6 / db.ramFactor) * q(d.readRho);
   const readLat = cfg.cache ? 0.5 + (1 - hit) * dbReadLat : dbReadLat;
   const writeLat = cfg.queue ? 4 : 10 * q(d.primaryRho);
-  const dynLat = net + (cfg.gateway ? 2 : 0) + (cfg.lb ? 1 : 0) + appLat + rPct * readLat + (1 - rPct) * writeLat + (cfg.sessions === 'shared' ? 1 : 0);
-  const staticLat = cfg.cdn ? 22 : net + appLat * 0.4;
+  const dynLat = net + (cfg.gateway ? 2 : 0) + (cfg.lb ? 1 : 0) + (cfg.proxy ? 0.5 : 0) + appLat + rPct * readLat + (1 - rPct) * writeLat + (cfg.sessions === 'shared' ? 1 : 0);
+  const staticLat = cfg.cdn ? 22 : net + (cfg.proxy ? 2 : appLat * 0.4);
   const p50 = sPct * staticLat + (1 - sPct) * dynLat;
   const maxRho = Math.max(appRho, d.readRho, d.primaryRho, isFinite(lbCap) ? gwOut / lbCap : 0);
   let p95 = p50 * (1.7 + 3 * Math.pow(Math.min(maxRho, 1), 4));
@@ -272,6 +285,8 @@ export function compute(cfg, rt = {}) {
     { id: 'queue', label: 'Queue + workers', on: cfg.queue, hr: cfg.queue ? P.queueHr + mPerHr(d.writes) * P.queuePerMMsg + cfg.workers * P.workerHr : 0,
       calc: `$${P.queueHr}/h + ${fmt(mPerHr(d.writes))}M msg/h × $${P.queuePerMMsg}/M + ${cfg.workers} workers × $${P.workerHr}/h` },
   ];
+  costItems.splice(2, 0, { id: 'proxy', label: 'Reverse proxy', on: cfg.proxy, hr: cfg.proxy ? P.proxyServerHr * totalServers : 0,
+    calc: `${totalServers} server${totalServers > 1 ? 's' : ''} × $${P.proxyServerHr}/h (a small slice of each server’s CPU; NGINX/Caddy themselves are free)` });
   const cost = Object.fromEntries(costItems.map((c) => [c.id, c.hr]));
   const costHr = costItems.reduce((a, c) => a + c.hr, 0);
 
@@ -284,6 +299,7 @@ export function compute(cfg, rt = {}) {
     app: { label: 'App Servers', on: true, in: appIn, work: appWork, cap: appCap, capBase: appCapBase, rho: appRho, err: appErr + sessErr, lat: appLat, perServer: sc, effServers, idleServers, cascade, sessErr },
     cache: { label: 'Cache', on: cfg.cache, in: d.cacheIn, cap: cacheCap, rho: cfg.cache ? d.cacheIn / cacheCap : 0, hit },
     db: { label: 'Database', on: true, reads: d.dbReads, writes: d.dbWrites, rho: Math.max(d.primaryRho, d.replicaRho, connNeeded / connMax), primaryRho: d.primaryRho, replicaRho: d.replicaRho, readRho: d.readRho, writeCap: d.writeCap, replicaCap: d.replicaCap, primaryReadCap: d.primaryReadCap, connNeeded, connMax, connErrFrac, err: dataErr, node: db, readLat, writeLat },
+    proxy: { label: 'Reverse Proxy', on: cfg.proxy, in: appIn, cap: proxyCap, rho: cfg.proxy ? appIn / proxyCap : 0, staticServed: proxyStatic },
     queue: { label: 'Queue', on: cfg.queue, in: d.writes, drain: actualDrain, growth: queueGrowth, rho: cfg.queue ? (d.writes / Math.max(1, d.workersCap)) : 0, backlog, err: queueErr },
     workers: { label: 'Workers', on: cfg.queue, in: actualDrain, cap: d.workersCap, rho: cfg.queue ? Math.min(d.writes, d.workersCap) / Math.max(1, d.workersCap) : 0 },
   };
@@ -298,7 +314,8 @@ export function compute(cfg, rt = {}) {
     'users-cdn': cdnIn,
     'users-gateway': gwIn,
     'gateway-lb': gwOut,
-    'lb-app': appIn,
+    'lb-proxy': appIn,
+    'proxy-app': appBound,
     'app-cache': d.cacheIn,
     'app-db': d.dbReads + (cfg.queue ? 0 : d.dbWrites),
     'app-queue': cfg.queue ? d.writes : 0,
@@ -308,7 +325,7 @@ export function compute(cfg, rt = {}) {
   const edgeErr = {
     'users-gateway': gwIn ? (gwErr + blocked) / gwIn : 0,
     'gateway-lb': gwOut ? lbErr / gwOut : 0,
-    'lb-app': appIn ? (appErr + sessErr) / appIn : 0,
+    'proxy-app': appBound ? (appErr + sessErr) / appBound : 0,
     'app-db': (d.dbReads + d.dbWrites) ? dataErr / (d.dbReads + (cfg.queue ? 0 : d.dbWrites) || 1) : 0,
   };
 
@@ -345,6 +362,7 @@ export function advise(cfg, r) {
   if (t.app.rho >= 0.8) {
     const sev = t.app.rho >= 1 ? 'critical' : 'warn';
     const bound = t.app.perServer.bound;
+    if (!cfg.proxy) add(sev, 'proxy', 'No reverse proxy in front of the app', 'NGINX/Caddy in front of each server handles HTTPS, compression and static files, so the app gets ~15% more CPU headroom and ~30% more memory headroom.', { proxy: true }, 'Add reverse proxy');
     if (!cfg.cdn && cfg.staticPct >= 20) add(sev, 'cdn', 'Static files are eating app capacity', `${cfg.staticPct}% of requests are images, JS and CSS. A CDN serves ~95% of them from the edge.`, { cdn: true }, 'Add a CDN');
     if (!cfg.gateway && cfg.botPct >= 10) add(sev, 'gateway', 'Bots are using your capacity', `${cfg.botPct}% of traffic is abusive. A rate limiter blocks it before it reaches servers.`, { gateway: true }, 'Add rate limiter');
     if (cfg.autoscale) {
@@ -407,6 +425,7 @@ export function findBreakingPoint(cfg) {
       const t = r.tiers;
       const cand = [
         ['App servers', t.app.rho + (t.app.sessErr > 0 ? 5 : 0)],
+        ['Reverse proxy', t.proxy.on ? t.proxy.rho : 0],
         ['Load balancer', t.lb.on ? t.lb.rho : 0],
         ['API gateway', t.gateway.on ? t.gateway.rho : 0],
         ['DB primary (writes)', t.db.primaryRho],
@@ -441,6 +460,6 @@ export const SCENARIOS = [
   { id: 'growing', name: 'Growing startup', desc: '8k users hitting the single server. Fix it.', patch: { ...DEFAULT_CONFIG, users: 8000, vcpu: 4, ram: 8 } },
   { id: 'readheavy', name: 'Viral content site', desc: 'Read-heavy, global, 90% reads.', patch: { ...DEFAULT_CONFIG, users: 120000, readPct: 92, staticPct: 55, lb: true, servers: 10, vcpu: 4, ram: 8, sessions: 'shared' } },
   { id: 'iot', name: 'IoT telemetry', desc: 'Write-heavy firehose from devices.', patch: { ...DEFAULT_CONFIG, users: 300000, reqPerMin: 4, readPct: 10, staticPct: 0, botPct: 0, lb: true, servers: 20, vcpu: 4, ram: 8, sessions: 'shared', pooler: true } },
-  { id: 'blackfriday', name: 'Black Friday', desc: 'Well built, then a 5× spike hits. Watch auto-scaling.', patch: { ...DEFAULT_CONFIG, users: 60000, lb: true, lbNodes: 2, servers: 8, vcpu: 8, ram: 16, autoscale: true, asMin: 8, asMax: 60, sessions: 'shared', cdn: true, gateway: true, cache: true, cacheGb: 32, dbVcpu: 16, dbRam: 64, replicas: 2, pooler: true, queue: true, workers: 8, breaker: true, pattern: 'spike' } },
-  { id: 'planet', name: 'Planet scale', desc: 'Every pattern on. 10M users across 3 regions.', patch: { ...DEFAULT_CONFIG, users: 10_000_000, reqPerMin: 3, readPct: 90, regions: 3, cdn: true, gateway: true, lb: true, lbNodes: 4, servers: 90, vcpu: 16, ram: 32, autoscale: true, asMin: 60, asMax: 200, sessions: 'shared', cache: true, cacheGb: 256, dbVcpu: 32, dbRam: 128, replicas: 2, shards: 32, pooler: true, queue: true, workers: 128, breaker: true } },
+  { id: 'blackfriday', name: 'Black Friday', desc: 'Well built, then a 5× spike hits. Watch auto-scaling.', patch: { ...DEFAULT_CONFIG, users: 60000, lb: true, lbNodes: 2, servers: 8, vcpu: 8, ram: 16, autoscale: true, asMin: 8, asMax: 60, sessions: 'shared', proxy: true, cdn: true, gateway: true, cache: true, cacheGb: 32, dbVcpu: 16, dbRam: 64, replicas: 2, pooler: true, queue: true, workers: 8, breaker: true, pattern: 'spike' } },
+  { id: 'planet', name: 'Planet scale', desc: 'Every pattern on. 10M users across 3 regions.', patch: { ...DEFAULT_CONFIG, users: 10_000_000, reqPerMin: 3, readPct: 90, regions: 3, cdn: true, gateway: true, lb: true, lbNodes: 4, servers: 90, vcpu: 16, ram: 32, autoscale: true, asMin: 60, asMax: 200, sessions: 'shared', proxy: true, cache: true, cacheGb: 256, dbVcpu: 32, dbRam: 128, replicas: 2, shards: 32, pooler: true, queue: true, workers: 128, breaker: true } },
 ];

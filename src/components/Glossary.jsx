@@ -97,6 +97,7 @@ function GlossaryModal({ id, canBack, onBack, onOpen, onClose }) {
             <Sec icon="⚙️" title="What it does">{g.does}</Sec>
             <Sec icon="🍽️" title="Beginner example" tone="ex">{g.example}</Sec>
             <Sec icon="📈" title="Why it matters & when to scale it" tone="why">{g.why}</Sec>
+            <NeedLists term={id} />
             <div className="gl-related">
               <span className="mono dim">RELATED</span>
               {g.related.map((r) => GLOSSARY[r] && (
@@ -106,6 +107,25 @@ function GlossaryModal({ id, canBack, onBack, onOpen, onClose }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// "When you DO / DO NOT need it" lists, for glossary terms that define them.
+export function NeedLists({ term, compact }) {
+  const g = GLOSSARY[term];
+  if (!g?.need) return null;
+  const name = g.title.toLowerCase();
+  return (
+    <div className={`need ${compact ? 'compact' : ''}`}>
+      <section className="need-col yes">
+        <h3 className="mono">✅ When you DO need a {name}</h3>
+        <ul>{g.need.map((x) => <li key={x}>{x}</li>)}</ul>
+      </section>
+      <section className="need-col no">
+        <h3 className="mono">🚫 When you DO NOT need a {name}</h3>
+        <ul>{g.noNeed.map((x) => <li key={x}>{x}</li>)}</ul>
+      </section>
     </div>
   );
 }

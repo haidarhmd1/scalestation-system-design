@@ -9,6 +9,7 @@ export const TECH_DEFAULTS = {
   cdn: 'cloudflare',
   gateway: 'kong',
   lb: 'nginx',
+  proxy: 'nginx-rp',
   runtime: 'node',
   platform: 'k8s',
   sessions: 'redis',
@@ -59,6 +60,17 @@ export const PICKERS = {
       o('nlb', 'AWS NLB', 'Managed L4', 'TCP/UDP at millions of rps with static IPs. No HTTP awareness.'),
       o('envoy', 'Envoy', 'L7 service proxy', 'Dynamic config via API, retries, circuit breaking. The data plane of Istio.'),
       o('traefik', 'Traefik', 'Cloud-native L7', 'Auto-discovers Docker and Kubernetes services, automatic Let’s Encrypt TLS.'),
+    ],
+  },
+  proxy: {
+    label: 'Reverse proxy',
+    options: [
+      o('nginx-rp', 'NGINX', 'Reverse proxy / web server', 'The most widely used reverse proxy: TLS termination, gzip, static files, caching, buffering. Config files, very fast.'),
+      o('caddy', 'Caddy', 'Reverse proxy with auto-HTTPS', 'Gets and renews Let’s Encrypt certificates automatically. Very short config. Great for small teams.'),
+      o('traefik-rp', 'Traefik', 'Cloud-native reverse proxy', 'Discovers Docker and Kubernetes services automatically and configures routes and certificates for them.'),
+      o('envoy-rp', 'Envoy', 'Service proxy', 'Dynamic configuration via API, rich metrics and retries. Used as the sidecar in Istio service meshes.'),
+      o('haproxy-rp', 'HAProxy', 'Proxy / load balancer', 'Extremely efficient, strong health checks. Often used for both reverse proxying and load balancing.'),
+      o('apache', 'Apache httpd (mod_proxy)', 'Classic web server', 'The veteran web server; still common in older and PHP stacks.'),
     ],
   },
   runtime: {
@@ -186,6 +198,12 @@ export const STATION_INFO = {
     why: 'Without one, DNS points at a single server and any extra servers sit idle.',
     model: 'Each LB node handles ~50k rps. Two or more nodes remove it as a single point of failure.',
     pickers: ['lb'],
+  },
+  proxy: {
+    what: 'A reverse proxy (e.g. NGINX) running in front of each app server. Users talk to it; it passes real work on to your app process.',
+    why: 'It takes generic chores off the app: HTTPS encryption, compression, serving static files from disk, and holding slow clients’ connections. The app spends its CPU and memory on actual requests.',
+    model: 'Serves 90% of static files that reach your servers, adds ~15% CPU headroom and ~30% memory headroom per app server, +0.5 ms per request. Costs a small CPU slice per server.',
+    pickers: ['proxy'],
   },
   app: {
     what: 'Your application code. Handles each request, talks to the cache, database and queue.',
