@@ -2,7 +2,7 @@
 
 **Learn system design by building, scaling and breaking it.**
 
-ScaleStation is a self-hosted, dark-mode playground for learning system design, from a single server all the way to planet-scale architectures. Read how each pattern works and watch a request travel through it step by step. Then push traffic at an architecture in the live simulator and see where it breaks. Finally, build a real system yourself on your own machine, one station at a time.
+ScaleStation is a self-hosted, dark-mode playground for learning system design, from a single server all the way to planet-scale architectures. Read how each pattern works and watch a request travel through it step by step. See what happens on the wire, from TCP handshakes to lost packets. Then push traffic at an architecture in the live simulator and see where it breaks. Finally, build a real system yourself on your own machine, one station at a time.
 
 The look is inspired by railway stations and signalling: requests travel like trains along tracks, every component is a station with a signal light, and patterns are grouped into "lines" from simple to complex.
 
@@ -12,7 +12,7 @@ The look is inspired by railway stations and signalling: requests travel like tr
 
 ## What's inside
 
-The app has three tabs plus a glossary.
+The app has four tabs plus a glossary.
 
 ### 1. Network Map: 52 patterns, simplest to most complex
 
@@ -74,9 +74,32 @@ A hands-on track of 12 stations. You write a real backend, run it with Docker an
 
 Every station has been run end to end in Docker for TypeScript (Express and Fastify) and Python. The IaC station was tested with both Terraform and OpenTofu.
 
-### Glossary: 52 terms for total beginners
+### 4. Networking: what actually happens on the wire
 
-From CPU and RAM to sharding, idempotency, stateless vs stateful servers, monitoring and infrastructure as code. Each entry covers:
+Every arrow in a system design diagram is a network trip. This tab explains them from the cable up.
+
+- **The layers**: the 7-layer OSI model next to the 4-layer TCP/IP model. Click a layer to see its job, its unit of data (frame, packet, segment), its addresses (MAC, IP, port), its protocols, an everyday analogy, what it means for system design (L4 vs L7 load balancers, VPCs, the speed of light), what it looks like when it breaks, and commands to try (`curl -v`, `dig`, `nc`, `traceroute`, `openssl s_client`).
+- **Encapsulation**: one HTTPS request, animated as it is wrapped in TLS, TCP, IP and Ethernet headers, forwarded by a router, and unwrapped by the server.
+- **12 animated flows**: sequence diagrams with a running clock that adds up every round trip:
+  - opening a URL from start to finish
+  - the TCP lifecycle (handshake, data, teardown)
+  - a lost packet and fast retransmit
+  - slow start and congestion control
+  - UDP for a video call
+  - a full DNS lookup from root to authoritative
+  - the TLS 1.3 handshake
+  - HTTP/3 over QUIC
+  - DHCP and ARP when joining Wi-Fi
+  - NAT
+  - WebSocket
+  - a request through an L7 load balancer
+- **TCP vs UDP vs QUIC** and **HTTP/1.1 vs 2 vs 3** side by side, with when to pick each.
+- **16 protocol cards** (IP, TCP, UDP, QUIC, ICMP, ARP, DHCP, DNS, TLS, HTTP/1.1–3, WebSocket, gRPC, NAT, BGP): how they work, what they are used for, what to watch out for, and what their header carries.
+- **Numbers worth knowing**: round-trip times from localhost to across the world, MTU, the first TCP flight, and the ports you meet in the Build Your Own track.
+
+### Glossary: 63 terms for total beginners
+
+From CPU and RAM to sharding, idempotency, stateless vs stateful servers, TCP, UDP, TLS, round trips, monitoring and infrastructure as code. Each entry covers:
 
 - where the word comes from
 - what it is and what it does
@@ -136,6 +159,7 @@ src/
 │   ├── SimMap.jsx          # Live line diagram with moving requests, pan & zoom
 │   ├── Methodology.jsx     # "How is this calculated?" panel
 │   ├── Build.jsx           # Build Your Own tab: language picker, stations, progress
+│   ├── Networking.jsx      # Networking tab: layers, encapsulation, sequence-diagram flows
 │   ├── Glossary.jsx        # ⓘ icons and glossary pop-ups
 │   └── ui.jsx              # Sliders, toggles, popovers, sparklines
 ├── data/
@@ -143,7 +167,8 @@ src/
 │   ├── architectures.js    # Architecture styles and comparison dimensions
 │   ├── journey.js          # Build track: stations and all code (TS, Python, Go,
 │   │                       #   Docker, NGINX, Prometheus, Grafana, Terraform)
-│   └── glossary.js         # The 52 glossary terms
+│   ├── networking.js       # Layers, flows, protocols and network numbers
+│   └── glossary.js         # The 63 glossary terms
 ├── sim/
 │   ├── model.js            # Capacity model, prices, advisor, breaking-point search
 │   └── tech.js             # Technology choices and station explanations

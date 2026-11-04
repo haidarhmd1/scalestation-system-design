@@ -5,7 +5,7 @@ import ArchCompare, { CompareTeaser } from './ArchCompare.jsx';
 import { NeedLists, useGlossary } from './Glossary.jsx';
 import { GLOSSARY, termsIn } from '../data/glossary.js';
 
-export default function Catalogue({ onTrySim, openRequest, onBuild }) {
+export default function Catalogue({ onTrySim, openRequest, onBuild, onNetworking }) {
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState('All');
   const [openId, setOpenId] = useState(null);
