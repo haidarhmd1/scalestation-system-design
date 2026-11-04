@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Catalogue from './components/Catalogue.jsx';
 import Simulator from './components/Simulator.jsx';
 import Build from './components/Build.jsx';
+import Networking from './components/Networking.jsx';
 import { GlossaryProvider, useGlossary } from './components/Glossary.jsx';
 
 function GlossaryButton() {
@@ -13,6 +14,7 @@ const readTab = () => {
   const h = window.location.hash;
   if (h.startsWith('#sim')) return 'sim';
   if (h.startsWith('#build')) return 'build';
+  if (h.startsWith('#net')) return 'net';
   return 'atlas';
 };
 
@@ -55,11 +57,18 @@ export default function App() {
             <span className="mono">03</span> Build Your Own
           </button>
         </div>
-        <GlossaryButton />
+        <div className="nav-tools">
+          <button className={`btn ghost small gl-open net-open ${tab === 'net' ? 'on' : ''}`} onClick={() => go('net')} aria-current={tab === 'net' ? 'page' : undefined}>
+            <svg className="net-ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 3.5h12M2 8h12M2 12.5h12" /><circle cx="5" cy="3.5" r="1.4" fill="currentColor" /><circle cx="10.5" cy="8" r="1.4" fill="currentColor" /><circle cx="7" cy="12.5" r="1.4" fill="currentColor" /></svg>
+            Networking
+          </button>
+          <GlossaryButton />
+        </div>
       </nav>
-      {tab === 'atlas' && <Catalogue onTrySim={trySim} openRequest={patternRequest} onBuild={() => go('build')} />}
+      {tab === 'atlas' && <Catalogue onTrySim={trySim} openRequest={patternRequest} onBuild={() => go('build')} onNetworking={() => go('net')} />}
       {tab === 'sim' && <Simulator preset={preset} />}
       {tab === 'build' && <Build onTrySim={trySim} onOpenPattern={openPattern} />}
+      {tab === 'net' && <Networking onOpenPattern={openPattern} />}
       <footer className="site-foot">
         <div className="foot-brand">
           <span className="brand-signal"><i /><i /><i /></span>
