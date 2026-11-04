@@ -98,9 +98,9 @@ Every arrow in a system design diagram is a network trip. This tab explains them
 - **16 protocol cards** (IP, TCP, UDP, QUIC, ICMP, ARP, DHCP, DNS, TLS, HTTP/1.1–3, WebSocket, gRPC, NAT, BGP): how they work, what they are used for, what to watch out for, and what their header carries.
 - **Numbers worth knowing**: round-trip times from localhost to across the world, MTU, the first TCP flight, and the ports you meet in the Build Your Own track.
 
-### Glossary: 63 terms for total beginners
+### Glossary: 79 terms for total beginners
 
-From CPU and RAM to sharding, idempotency, stateless vs stateful servers, TCP, UDP, TLS, round trips, monitoring and infrastructure as code. Each entry covers:
+From CPU and RAM to sharding, idempotency, stateless vs stateful servers, TCP, UDP, TLS, round trips, TTLs, DNS resolvers, BGP and anycast, event loops, the write-ahead log, monitoring and infrastructure as code. Each entry covers:
 
 - where the word comes from
 - what it is and what it does
@@ -171,7 +171,7 @@ src/
 │   │                       #   Docker, NGINX, Prometheus, Grafana, Terraform)
 │   ├── networking.js       # Layers, flows, protocols and network numbers
 │   ├── internals.js        # What happens inside each station, per technology
-│   └── glossary.js         # The 63 glossary terms
+│   └── glossary.js         # The 79 glossary terms
 ├── sim/
 │   ├── model.js            # Capacity model, prices, advisor, breaking-point search
 │   └── tech.js             # Technology choices and station explanations

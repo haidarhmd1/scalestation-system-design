@@ -930,3 +930,6 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .net-toc .legend-row.is-open .legend-line { background: var(--blue); }
 .net-fold-all { margin-top: 6px; justify-self: start; }
 
+.tt-terms { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.term-chip.tiny { padding: 1px 8px 1px 4px; font-size: 11px; line-height: 1.6; }
+.term-chip.tiny .info { width: 13px; height: 13px; font-size: 9px; margin-right: 4px; }

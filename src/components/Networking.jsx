@@ -4,7 +4,15 @@ import {
   NUMBERS, PORTS, PROTOCOLS, SEGMENTS, TCPIP, TRANSPORT_COMPARE,
 } from '../data/networking.js';
 import { PATTERNS } from '../data/patterns.js';
-import { Info, Term } from './Glossary.jsx';
+import { Info, Term, TermChips } from './Glossary.jsx';
+
+// Glossary terms worth linking from flow steps (networking + internals, not basics).
+export const FLOW_TERMS = new Set([
+  'osi', 'packet', 'ip', 'port', 'tcp', 'udp', 'rtt', 'tls', 'http', 'quic', 'websocket',
+  'ttl', 'resolver', 'authoritative', 'anycast', 'bgp', 'nat', 'mac', 'pop', 'nic',
+  'syscall', 'event-loop', 'page-cache', 'wal', 'mvcc', 'gc', 'jit',
+  'cdn', 'lb', 'reverse-proxy', 'pool', 'idempotency', 'replica', 'ratelimit', 'healthcheck', 'backpressure', 'workingset',
+]);
 
 const SECTIONS = [
   ['net-layers', 'Layers'],
@@ -439,7 +447,7 @@ export function SeqDiagram({ flow, autoPlay = false }) {
           <li key={i} className={i === step ? 'on' : i < step ? 'past' : ''} style={{ '--line': KINDS[s.kind].color }} onClick={() => { go(i); setPlaying(false); }}>
             <span className="tt-idx mono">{String(i + 1).padStart(2, '0')}</span>
             <span className="tt-route mono">{s.from === s.to ? label(s.from) : `${label(s.from)} → ${label(s.to)}`}{s.lost && <span className="lost-tag"> ✕ lost</span>}</span>
-            <span className="tt-text"><code className="tt-msg" style={{ color: KINDS[s.kind].color }}>{s.msg}</code> {s.text}</span>
+            <span className="tt-text"><code className="tt-msg" style={{ color: KINDS[s.kind].color }}>{s.msg}</code> {s.text}<TermChips text={`${s.msg} ${s.text}`} only={FLOW_TERMS} /></span>
           </li>
         ))}
       </ol>

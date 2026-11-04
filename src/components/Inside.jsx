@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { INSIDE, INTERNAL_FLOWS, STATION_PICKER, TECH_NOTES } from '../data/internals.js';
 import { PICKERS, TECH_DEFAULTS } from '../sim/tech.js';
-import { SeqDiagram } from './Networking.jsx';
+import { FLOW_TERMS, SeqDiagram } from './Networking.jsx';
+import { TermChips } from './Glossary.jsx';
 
 const LABEL = { users: 'Users', dns: 'DNS', cdn: 'CDN edge', gateway: 'API gateway', lb: 'Load balancer', proxy: 'Reverse proxy', app: 'App servers', cache: 'Cache', db: 'Database', queue: 'Queue', workers: 'Workers' };
 
@@ -74,7 +75,7 @@ export default function InsideModal({ id, cfg, r, onClose }) {
               </div>
             )}
             <div className="panel-label mono">ONE REQUEST, STEP BY STEP</div>
-            <SeqDiagram flow={flow} autoPlay />
+            <SeqDiagram flow={flow} />
           </section>
 
           <aside className="inside-side">
@@ -89,19 +90,19 @@ export default function InsideModal({ id, cfg, r, onClose }) {
             {notes && (
               <div className="inside-sec">
                 <h3>How {tech} does it</h3>
-                <ul className="inside-notes">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
+                <ul className="inside-notes">{notes.map((n) => <li key={n}>{n}<TermChips text={n} only={FLOW_TERMS} max={3} /></li>)}</ul>
               </div>
             )}
             <div className="inside-sec">
               <h3>Software: what runs inside</h3>
               <ul className="inside-list" style={{ '--k': '#4da3ff' }}>
-                {info.software.map(([k, v]) => <li key={k}><b>{k}</b>{fill(val(v, ctx), tech)}</li>)}
+                {info.software.map(([k, v]) => <li key={k}><b>{k}</b>{fill(val(v, ctx), tech)}<TermChips text={`${k} ${fill(val(v, ctx), tech)}`} only={FLOW_TERMS} max={3} /></li>)}
               </ul>
             </div>
             <div className="inside-sec">
               <h3>Hardware: what the machine does</h3>
               <ul className="inside-list" style={{ '--k': '#f472b6' }}>
-                {info.hardware.map(([k, v]) => <li key={k}><b>{k}</b>{fill(val(v, ctx), tech)}</li>)}
+                {info.hardware.map(([k, v]) => <li key={k}><b>{k}</b>{fill(val(v, ctx), tech)}<TermChips text={`${k} ${fill(val(v, ctx), tech)}`} only={FLOW_TERMS} max={3} /></li>)}
               </ul>
             </div>
           </aside>
