@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CONFIG, RAM_STEPS, SCENARIOS, VCPU_STEPS, advise, compute, findBreakingPoint, fmt, ms, pct, serverCapacity } from '../sim/model.js';
 import SimMap, { STATUS_COLOR } from './SimMap.jsx';
+import InsideModal from './Inside.jsx';
 import { Popover, Segmented, Slider, Sparkline, StepSlider, Toggle } from './ui.jsx';
 import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js';
 import { Info, NeedLists, Term } from './Glossary.jsx';
@@ -37,6 +38,7 @@ export default function Simulator({ preset }) {
   const [selected, setSelected] = useState('app');
   const [bp, setBp] = useState(null);
   const [fs, setFs] = useState(false);
+  const [insideId, setInsideId] = useState(null);
   const [fsInsp, setFsInsp] = useState(true);
   const [meth, setMeth] = useState(null);
   const [leftOpen, setLeftOpen] = usePersisted('scalestation.leftOpen', true);
@@ -275,7 +277,8 @@ export default function Simulator({ preset }) {
             </div>
           )}
           <div className="map-stage">
-            <SimMap r={r} cfg={cfg} servers={runtimeServers} booting={cfg.autoscale ? sim.booting.length : 0} selected={selected} onSelect={selectStation} fullscreen={fs} />
+            <SimMap r={r} cfg={cfg} servers={runtimeServers} booting={cfg.autoscale ? sim.booting.length : 0} selected={selected} onSelect={selectStation} fullscreen={fs} onInside={(id) => { setSelected(id); setInsideId(id); }} />
+            {insideId && <InsideModal id={insideId} cfg={cfg} r={r} onClose={() => setInsideId(null)} />}
             {fs && fsInsp && (
               <aside className="fs-insp panel">
                 <button className="btn ghost small fs-insp-close" onClick={() => setFsInsp(false)} aria-label="Hide inspector">✕</button>

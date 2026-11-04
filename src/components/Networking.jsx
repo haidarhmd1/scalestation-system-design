@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ENCAP_STACKS, ENCAP_STEPS, FLOWS, FLOW_PATTERNS, HTTP_COMPARE, KINDS, LAYERS, LAYER_SHORT,
   NUMBERS, PORTS, PROTOCOLS, SEGMENTS, TCPIP, TRANSPORT_COMPARE,
@@ -17,13 +17,24 @@ const SECTIONS = [
 
 const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+// Which sections are open. All start collapsed so the page isn't overwhelming.
+const FoldCtx = createContext({ isOpen: () => true, toggle: () => {} });
+
 export default function Networking({ onOpenPattern }) {
   const [flowId, setFlowId] = useState(FLOWS[0].id);
   const [protoId, setProtoId] = useState('tcp');
-  const showFlow = (id) => { setFlowId(id); setTimeout(() => scrollTo('net-flows'), 0); };
-  const showProto = (id) => { setProtoId(id); setTimeout(() => scrollTo('net-protocols'), 0); };
+  const [open, setOpen] = useState(() => new Set());
+  const reveal = (id) => { setOpen((o) => new Set(o).add(id)); setTimeout(() => scrollTo(id), 0); };
+  const fold = useMemo(() => ({
+    isOpen: (id) => open.has(id),
+    toggle: (id) => setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; }),
+  }), [open]);
+  const allOpen = open.size === SECTIONS.length;
+  const showFlow = (id) => { setFlowId(id); reveal('net-flows'); };
+  const showProto = (id) => { setProtoId(id); reveal('net-protocols'); };
 
   return (
+    <FoldCtx.Provider value={fold}>
     <div className="net-page">
       <section className="hero net-hero">
         <div>
@@ -36,12 +47,15 @@ export default function Networking({ onOpenPattern }) {
         </div>
         <nav className="net-toc" aria-label="On this page">
           {SECTIONS.map(([id, label], i) => (
-            <button key={id} className="legend-row" onClick={() => scrollTo(id)}>
+            <button key={id} className={`legend-row ${open.has(id) ? 'is-open' : ''}`} onClick={() => reveal(id)}>
               <span className="legend-line" />
               <span className="mono">{String(i + 1).padStart(2, '0')}</span>
               <span>{label}</span>
             </button>
           ))}
+          <button className="btn ghost small net-fold-all" onClick={() => setOpen(allOpen ? new Set() : new Set(SECTIONS.map(([id]) => id)))}>
+            {allOpen ? '▴ Collapse all' : '▾ Expand all'}
+          </button>
         </nav>
       </section>
 
@@ -52,14 +66,22 @@ export default function Networking({ onOpenPattern }) {
       <ProtocolsSection protoId={protoId} setProtoId={setProtoId} onFlow={showFlow} />
       <NumbersSection />
     </div>
+    </FoldCtx.Provider>
   );
 }
 
+// Section header doubles as the collapse toggle; the rest of the section
+// is hidden by CSS while it is closed (kept mounted, so state survives).
 function SectionHead({ id, n, title, children }) {
+  const { isOpen, toggle } = useContext(FoldCtx);
+  const open = isOpen(id);
   return (
-    <header className="net-sec-head" id={id}>
-      <span className="line-badge mono">{n}</span>
-      <h2>{title}</h2>
+    <header className={`net-sec-head ${open ? 'open' : 'closed'}`} id={id}>
+      <button type="button" className="net-sec-toggle" onClick={() => toggle(id)} aria-expanded={open} aria-controls={`${id}-body`}>
+        <span className="line-badge mono">{n}</span>
+        <h2>{title}</h2>
+        <span className="net-sec-chev mono">{open ? 'Hide' : 'Show'} <i aria-hidden="true">▾</i></span>
+      </button>
       {children && <p>{children}</p>}
     </header>
   );
@@ -71,7 +93,7 @@ function LayersSection({ onProto }) {
   const L = LAYERS.find((l) => l.n === sel);
   const tcpipOf = TCPIP.find((t) => t.covers.includes(sel));
   return (
-    <section className="net-sec">
+    <section className="net-sec" style={{marginBottom: "25px", marginTop: "25px"}}>
       <SectionHead id="net-layers" n="01" title="The layers">
         Networking is split into layers. Each one does a single job and only talks to the layers directly above and below it. The <Term term="osi">OSI model</Term> has 7 layers and is how people talk about networks (“an L7 load balancer”); the TCP/IP model has 4 and is what the internet actually runs.
       </SectionHead>
@@ -136,6 +158,23 @@ function LayersSection({ onProto }) {
   );
 }
 
+// Shared controls: previous / play-pause / next, step count and clickable dots.
+function StepControls({ i, n, playing, onToggle, onGo, titles = [] }) {
+  return (
+    <div className="flow-controls step-controls">
+      <button className="btn ghost" onClick={() => onGo(i - 1)} aria-label="Previous step">◀</button>
+      <button className="btn" onClick={onToggle}>{playing ? '❚❚ Pause' : '▶ Play'}</button>
+      <button className="btn ghost" onClick={() => onGo(i + 1)} aria-label="Next step">▶</button>
+      <span className="mono dim">step {i + 1}/{n}</span>
+      <div className="encap-dots">
+        {Array.from({ length: n }, (_, k) => (
+          <button key={k} className={k === i ? 'on' : k < i ? 'past' : ''} onClick={() => onGo(k)} aria-label={`Step ${k + 1}${titles[k] ? `: ${titles[k]}` : ''}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── 2 · Encapsulation ──────────────────────────────────────────────────────
 const ENC_MS = 3400;
 
@@ -148,7 +187,7 @@ function segFields(id, st) {
 
 function Encapsulation() {
   const [i, setI] = useState(0);
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(false); // starts paused: the reader drives it
   useEffect(() => {
     if (!playing) return undefined;
     const t = setInterval(() => setI((x) => (x + 1) % ENCAP_STEPS.length), ENC_MS);
@@ -159,12 +198,16 @@ function Encapsulation() {
   const phase = st.at[0] === 'send' ? 'going down: wrap' : st.at[0] === 'router' ? 'in transit' : 'going up: unwrap';
 
   return (
-    <section className="net-sec">
+    <section className="net-sec" style={{marginBottom: "25px", marginTop: "25px"}}>
       <SectionHead id="net-encap" n="02" title="Encapsulation: envelopes inside envelopes">
         On the way down, each layer puts the data from the layer above inside its own envelope (a header). Routers only open the outer envelopes they need. On the way up, the receiver opens them one by one. Follow one HTTPS request.
       </SectionHead>
       <div className="panel encap">
+        <div style={{display: "flex", alignSelf: "end"}}>
+        <StepControls i={i} n={ENCAP_STEPS.length} playing={playing} onToggle={() => setPlaying((p) => !p)} onGo={go} titles={ENCAP_STEPS.map((x) => x.title)} />
+          </div>
         <div className="encap-stacks">
+          
           {Object.entries(ENCAP_STACKS).map(([key, s], si) => (
             <div key={key} className={`encap-stack ${st.at[0] === key ? 'on' : ''}`}>
               <div className="encap-stack-title mono">{s.title}</div>
@@ -200,14 +243,6 @@ function Encapsulation() {
           })}
         </div>
 
-        <div className="flow-controls">
-          <button className="btn ghost" onClick={() => go(i - 1)} aria-label="Previous step">◀</button>
-          <button className="btn" onClick={() => setPlaying((p) => !p)}>{playing ? '❚❚ Pause' : '▶ Play'}</button>
-          <button className="btn ghost" onClick={() => go(i + 1)} aria-label="Next step">▶</button>
-          <div className="encap-dots">
-            {ENCAP_STEPS.map((s, k) => <button key={k} className={k === i ? 'on' : k < i ? 'past' : ''} onClick={() => go(k)} aria-label={`Step ${k + 1}: ${s.title}`} />)}
-          </div>
-        </div>
       </div>
     </section>
   );
@@ -218,7 +253,7 @@ function FlowsSection({ flowId, setFlowId, onOpenPattern }) {
   const flow = FLOWS.find((f) => f.id === flowId);
   const pats = (FLOW_PATTERNS[flow.id] || []).map((id) => PATTERNS.find((p) => p.id === id)).filter(Boolean);
   return (
-    <section className="net-sec">
+    <section className="net-sec" style={{marginBottom: "25px", marginTop: "25px"}}>
       <SectionHead id="net-flows" n="03" title="Flows: watch the packets move">
         Each diagram is a timeline: time runs downwards, every arrow is one trip across the network. The clock adds up how long it takes, so you can see why round trips matter.
       </SectionHead>
@@ -257,13 +292,16 @@ function FlowsSection({ flowId, setFlowId, onOpenPattern }) {
   );
 }
 
+// Internal flows run in microseconds; network flows in milliseconds.
+const fmtMs = (v, total) => (total < 2 ? `${Math.round(v * 1000)} µs` : total < 20 ? `${v.toFixed(1)} ms` : `${Math.round(v)} ms`);
+
 const S_ROW = 44;
 const S_TOP = 74;
 const S_PADX = 86;
 const MOVE_MS = 900;
 const HOLD_MS = 1800;
 
-function SeqDiagram({ flow }) {
+export function SeqDiagram({ flow, autoPlay = false }) {
   const { actors, steps } = flow;
   const n = actors.length;
   const W = Math.max(640, n * 172);
@@ -275,14 +313,19 @@ function SeqDiagram({ flow }) {
   const kindsUsed = [...new Set(steps.map((s) => s.kind))];
 
   const [step, setStep] = useState(0);
-  const [playing, setPlaying] = useState(true);
-  const [t, setT] = useState(0);
-  const start = useRef(performance.now());
+  const [playing, setPlaying] = useState(autoPlay);
+  const [t, setT] = useState(autoPlay ? 0 : 1);
+  // when paused, show the current step already drawn instead of animating it in
+  const start = useRef(performance.now() - (autoPlay ? 0 : MOVE_MS));
   const raf = useRef(0);
   const box = useRef(null);
   const list = useRef(null);
 
-  useEffect(() => { setStep(0); setPlaying(true); start.current = performance.now(); }, [flow.id]);
+  useEffect(() => {
+    setStep(0);
+    setPlaying(autoPlay);
+    start.current = performance.now() - (autoPlay ? 0 : MOVE_MS);
+  }, [flow.id, autoPlay]);
 
   useEffect(() => {
     const loop = (now) => {
@@ -325,7 +368,7 @@ function SeqDiagram({ flow }) {
           {kindsUsed.map((k) => <span key={k} className="seq-kind mono" style={{ '--k': KINDS[k].color }}>{KINDS[k].label}</span>)}
         </div>
         <div className="seq-clock mono" title="Estimated time since the first step">
-          ⏱ {Math.round(elapsed)} ms <span className="dim">/ ~{total} ms</span>
+          ⏱ {fmtMs(elapsed, total)} <span className="dim">/ ~{fmtMs(total, total)}</span>
         </div>
       </div>
       <div className="seq-canvas" ref={box}>
@@ -389,12 +432,7 @@ function SeqDiagram({ flow }) {
         </svg>
       </div>
 
-      <div className="flow-controls">
-        <button className="btn ghost" onClick={() => go(step - 1)} aria-label="Previous step">◀</button>
-        <button className="btn" onClick={() => setPlaying((p) => !p)}>{playing ? '❚❚ Pause' : '▶ Play'}</button>
-        <button className="btn ghost" onClick={() => go(step + 1)} aria-label="Next step">▶</button>
-        <span className="mono dim">step {step + 1}/{steps.length}</span>
-      </div>
+      <StepControls i={step} n={steps.length} playing={playing} onToggle={() => { if (!playing) start.current = performance.now(); setPlaying((p) => !p); }} onGo={go} titles={steps.map((x) => x.msg)} />
 
       <ol className="timetable seq-table" ref={list}>
         {steps.map((s, i) => (
@@ -426,7 +464,7 @@ function CompareTable({ data, caption }) {
 
 function CompareSection() {
   return (
-    <section className="net-sec">
+    <section className="net-sec" style={{marginBottom: "25px", marginTop: "25px"}}>
       <SectionHead id="net-compare" n="04" title="TCP vs UDP vs QUIC, and the HTTP versions">
         The choice of transport decides how your app behaves when the network is slow or drops packets, which on the real internet is all the time.
       </SectionHead>
@@ -457,7 +495,7 @@ function ProtocolsSection({ protoId, setProtoId, onFlow }) {
   const p = PROTOCOLS.find((x) => x.id === protoId);
   const layer = LAYERS.find((l) => l.n === p.layer);
   return (
-    <section className="net-sec">
+    <section className="net-sec" style={{marginBottom: "25px", marginTop: "25px"}}>
       <SectionHead id="net-protocols" n="05" title="Protocols, one by one">
         A protocol is an agreed set of rules for a conversation: who speaks first, what each message looks like and what to do when something goes wrong. Pick one.
       </SectionHead>
@@ -494,7 +532,7 @@ function ProtocolsSection({ protoId, setProtoId, onFlow }) {
 // ── 6 · Numbers ────────────────────────────────────────────────────────────
 function NumbersSection() {
   return (
-    <section className="net-sec">
+    <section className="net-sec" style={{marginBottom: "25px", marginTop: "25px"}}>
       <SectionHead id="net-numbers" n="06" title="Numbers worth knowing">
         Rough orders of magnitude to sanity-check a design. A request that crosses an ocean 4 times can’t be fast, however fast the servers are. <Info term="latency" label="latency" />
       </SectionHead>

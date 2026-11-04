@@ -39,6 +39,7 @@ A live line diagram of an architecture, with requests moving along the tracks, c
 - **Horizontal scaling**: server count, load balancer (nodes and algorithm), auto-scaling with boot time and cooldown.
 - **Components to build**: CDN, API gateway / rate limiter, reverse proxy, cache, message queue + workers, read replicas, shards, connection pooler, circuit breakers, session storage (in memory / sticky / shared Redis), 1–3 regions.
 - **Real technologies**: pick what each component would be, e.g. Redis or Memcached; BullMQ, RabbitMQ, SQS or Kafka; PostgreSQL, MySQL, MongoDB or CockroachDB; NGINX, HAProxy or AWS ALB.
+- **Look inside any station**: the ⌕ icon on each active card opens a pop-up with an animated step-by-step flow of what happens inside it: how Route 53 answers a DNS query, how Node.js's event loop or Go's goroutines handle a request on your vCPUs, how PostgreSQL reads pages and fsyncs the WAL, how Redis, Kafka or a CDN edge work. It covers the software and the hardware (CPU, RAM, NIC, disk), uses your live numbers, and lets you switch technologies to compare.
 - **Live numbers**: offered vs served requests, error rate, p95 latency, uptime estimate and monthly cost, with history charts and an event log.
 - **Find breaking point**: raises traffic until something fails and tells you which component broke first.
 - **Dispatcher**: explains what is wrong ("users are being logged out", "database out of connections", "cascading failure") and applies a fix in one click.
@@ -160,6 +161,7 @@ src/
 │   ├── Methodology.jsx     # "How is this calculated?" panel
 │   ├── Build.jsx           # Build Your Own tab: language picker, stations, progress
 │   ├── Networking.jsx      # Networking tab: layers, encapsulation, sequence-diagram flows
+│   ├── Inside.jsx          # Simulator "look inside a station" pop-up
 │   ├── Glossary.jsx        # ⓘ icons and glossary pop-ups
 │   └── ui.jsx              # Sliders, toggles, popovers, sparklines
 ├── data/
@@ -168,6 +170,7 @@ src/
 │   ├── journey.js          # Build track: stations and all code (TS, Python, Go,
 │   │                       #   Docker, NGINX, Prometheus, Grafana, Terraform)
 │   ├── networking.js       # Layers, flows, protocols and network numbers
+│   ├── internals.js        # What happens inside each station, per technology
 │   └── glossary.js         # The 63 glossary terms
 ├── sim/
 │   ├── model.js            # Capacity model, prices, advisor, breaking-point search
