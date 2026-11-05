@@ -1,0 +1,141 @@
+ScaleStation Source-Available License
+Version 1.0
+
+Copyright (c) 2026 Haidar Hammoud. All rights reserved.
+
+This repository is public so that people can read it, learn from it and
+contribute to it. It is NOT open source. Making the code visible does not
+give you the right to reuse it. Everything not explicitly allowed below
+is forbidden.
+
+In short: you may clone it and run it for your own learning. You may not
+publish, copy, host, sell or reuse it, or present it as your own. Changes
+happen only through the Owner: first an issue the Owner approves, then a
+pull request the Owner approves.
+
+1. DEFINITIONS
+
+   "Software" means everything in this repository: source code, text,
+   explanations, diagrams, data, styles, images and documentation, in any
+   version.
+
+   "Owner" means Haidar Hammoud (GitHub: @haidarhmd1).
+
+   "Official Repository" means
+   https://github.com/haidarhmd1/scalestation-system-design.
+
+   "Contribution" means any change you propose to the Software through the
+   process in section 4.
+
+2. WHAT YOU MAY DO
+
+   Subject to this license, you may:
+
+   a) view and read the Software;
+
+   b) clone or download the Software to your own device and run it locally,
+      for your own personal, non-commercial learning;
+
+   c) change your local copy privately, only to try things out or to
+      prepare a Contribution that the Owner has approved under section 4;
+
+   d) create a fork on GitHub only as far as needed to submit an approved
+      Contribution as a pull request to the Official Repository.
+
+3. WHAT YOU MAY NOT DO
+
+   Unless the Owner has given you prior written permission, you may not:
+
+   a) copy, reproduce, publish, republish, mirror or redistribute the
+      Software or any part of it, in original or modified form, in any
+      medium or on any platform;
+
+   b) publish, maintain or distribute a fork or modified version, or use a
+      fork for anything other than submitting an approved pull request;
+
+   c) create, publish or distribute derivative works based on the Software,
+      including translations, ports, re-skins or "inspired" copies that
+      reuse its code, text, explanations, diagrams or data;
+
+   d) host, deploy or make the Software available to others as a website,
+      app or service;
+
+   e) use the Software, or any part of it, for any commercial purpose,
+      including paid courses, products, consulting or training material;
+
+   f) sell, sublicense, rent or lend the Software;
+
+   g) use the Software, or any part of it, to train, fine-tune or evaluate
+      machine-learning or AI models, or include it in datasets;
+
+   h) remove or change any copyright notice, this license, or attribution;
+
+   i) present the Software or any part of it as your own work, or use the
+      name "ScaleStation", the Owner's name or any branding to endorse or
+      promote anything.
+
+4. CONTRIBUTIONS
+
+   Changes to the Software are made only through the Owner, in two steps:
+
+   a) Issue first. Before writing a change, open an issue in the Official
+      Repository describing what you want to change and why. Work on a
+      pull request may only start after the Owner has approved the issue.
+      Small fixes (typos, broken links) may skip this step, but the Owner
+      may still close any pull request that has no approved issue.
+
+   b) Pull request second. Submit the approved change as a pull request to
+      the Official Repository, linked to its issue. The Owner reviews it
+      and decides alone and at their sole discretion whether to accept,
+      change or reject it. Nothing is merged without the Owner's approval,
+      and the Owner has no obligation to accept any Contribution.
+
+   c) By submitting a Contribution you confirm that it is your own original
+      work, or that you have the right to submit it, and you grant the Owner
+      a perpetual, worldwide, irrevocable, royalty-free, non-exclusive
+      license to use, copy, modify, relicense and distribute your
+      Contribution as part of the Software or otherwise. You receive no
+      payment and no ownership of the Software.
+
+   d) A fork created to prepare a pull request may be used for nothing else.
+      Delete it, or keep it private to yourself, once your pull request is
+      merged or closed.
+
+5. FORKS ON GITHUB
+
+   Because the Official Repository is public on GitHub, GitHub's Terms of
+   Service allow GitHub users to view and fork it within GitHub. This
+   license does not take away that platform function, but it limits what
+   you may do with a fork: section 3 applies to every fork, and a fork may
+   only be used as described in section 4. A fork used in any other way
+   infringes the Owner's copyright and may be removed through a takedown
+   request to GitHub.
+
+6. THIRD-PARTY COMPONENTS
+
+   Third-party libraries used by the Software (for example React and Vite,
+   installed through npm) remain under their own licenses. This license
+   covers only the Owner's work.
+
+7. TERMINATION
+
+   If you break any term of this license, your rights under it end
+   immediately and automatically. You must then delete all copies of the
+   Software in your possession, including forks.
+
+8. NO WARRANTY AND NO LIABILITY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+   IN NO EVENT SHALL THE OWNER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+   DEALINGS IN THE SOFTWARE. The numbers, prices and explanations are for
+   learning only and are not professional advice.
+
+9. PERMISSIONS AND CONTACT
+
+   For any use not allowed above (teaching, company training, hosting,
+   reuse of content), ask the Owner for written permission through GitHub:
+   https://github.com/haidarhmd1

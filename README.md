@@ -182,6 +182,10 @@ src/
 
 ---
 
+## License
+
+**Source-available, all rights reserved.** You may clone ScaleStation and run it locally for your own learning. You may not publish, copy, host, sell or reuse it (code or content), publish a fork or modified version, or present it as your own without written permission. Want a change? Open an issue first; once the owner approves it, send a pull request, which also needs the owner's approval. See [LICENSE](LICENSE) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Author
 
 Built by **Haidar Hammoud** · [GitHub](https://github.com/haidarhmd1) · [LinkedIn](https://www.linkedin.com/in/haidarhmd)
