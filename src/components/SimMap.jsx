@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { fmt, pct } from '../sim/model.js';
 import { shortTech } from '../sim/tech.js';
+
+const InsideCtx = createContext(null);
 
 export const STATUS_COLOR = { green: '#3ddc84', amber: '#ffb020', red: '#ff7a45', broken: '#ff4d4f', off: '#3a4552' };
 
@@ -59,7 +61,7 @@ function pointAt(g, s) {
 const VW = 1240;
 const VH = 590;
 
-export default function SimMap({ r, cfg, servers, booting, selected, onSelect, fullscreen }) {
+export default function SimMap({ r, cfg, servers, booting, selected, onSelect, fullscreen, onInside }) {
   // ── pan & zoom ──
   const svgRef = useRef(null);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
@@ -202,6 +204,7 @@ export default function SimMap({ r, cfg, servers, booting, selected, onSelect, f
       <button type="button" onClick={() => setView({ x: 0, y: 0, k: 1 })} aria-label="Reset view" title="Reset view">⟲</button>
       <span className="mono">{Math.round(view.k * 100)}%</span>
     </div>
+    <InsideCtx.Provider value={onInside}>
     <svg ref={svgRef} viewBox={`${view.x} ${view.y} ${VW / view.k} ${VH / view.k}`} className={`simmap ${drag.current?.active ? 'dragging' : ''}`} role="img" aria-label="Live system line diagram"
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onClickCapture={onClickCapture}>
       <defs>
@@ -279,6 +282,7 @@ export default function SimMap({ r, cfg, servers, booting, selected, onSelect, f
         );
       })}
     </svg>
+    </InsideCtx.Provider>
     </div>
   );
 }
@@ -294,6 +298,23 @@ function FitText({ x, y, w, className, children }) {
   const est = s.length * (CHAR_W[className] || 6.4);
   const fit = est > w ? { textLength: w, lengthAdjust: 'spacingAndGlyphs' } : {};
   return <text x={x} y={y} className={className} {...fit}>{s}</text>;
+}
+
+// Small magnifier in the card header: opens the "look inside" pop-up.
+function InsideButton({ id, x, y, title }) {
+  const onInside = useContext(InsideCtx);
+  if (!onInside) return null;
+  const open = (e) => { e.stopPropagation(); onInside(id); };
+  return (
+    <g className="st-inside" transform={`translate(${x},${y})`} role="button" tabIndex={0} aria-label={`Look inside ${title}`}
+      onClick={open} onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } }}>
+      <title>Look inside: how it works</title>
+      <rect width="22" height="16" rx="4" />
+      <circle cx="10" cy="7.3" r="3.6" />
+      <line x1="12.7" y1="10" x2="15.6" y2="12.8" />
+    </g>
+  );
 }
 
 // Single signal light in the card header (no traffic-light housing).
@@ -316,8 +337,9 @@ function Frame({ id, s, title, status, sel, onSelect, children, off }) {
       <rect x={x} y={y} width={s.w} height={s.h} rx="8" className="st-box" />
       <rect x={x} y={y} width={s.w} height="20" rx="8" className="st-head" />
       <rect x={x} y={y + 12} width={s.w} height="8" className="st-head" />
-      <FitText x={x + PAD} y={y + 14} w={s.w - PAD - 24} className="st-title">{title}</FitText>
+      <FitText x={x + PAD} y={y + 14} w={s.w - PAD - (off ? 24 : 52)} className="st-title">{title}</FitText>
       {!off && <SignalDot x={x + s.w - 12} y={y + 10} status={status} />}
+      {!off && <InsideButton id={id} x={x + s.w - 46} y={y + 2} title={title} />}
       {children(x, y)}
     </g>
   );

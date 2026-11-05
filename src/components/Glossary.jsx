@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { GLOSSARY, GLOSSARY_ORDER } from '../data/glossary.js';
+import { GLOSSARY, GLOSSARY_ORDER, termsIn } from '../data/glossary.js';
 
 const Ctx = createContext({ open: () => {} });
 export const useGlossary = () => useContext(Ctx);
@@ -42,6 +42,24 @@ export function Info({ term, label }) {
     >
       i
     </button>
+  );
+}
+
+// Small glossary chips for the technical terms found in a piece of text.
+// `only` limits it to a set of term ids (to skip basics like “server”).
+export function TermChips({ text, only, max = 4 }) {
+  const { open } = useGlossary();
+  const ids = termsIn(text).filter((id) => !only || only.has(id)).slice(0, max);
+  if (!ids.length) return null;
+  return (
+    <span className="tt-terms">
+      {ids.map((id) => (
+        <button key={id} type="button" className="chip term-chip tiny"
+          onClick={(e) => { e.stopPropagation(); open(id); }} title={`What is ${GLOSSARY[id].title}?`}>
+          <span className="info static">i</span>{GLOSSARY[id].title.replace(/\s*\(.*\)$/, '')}
+        </button>
+      ))}
+    </span>
   );
 }
 

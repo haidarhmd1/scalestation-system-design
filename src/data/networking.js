@@ -152,6 +152,11 @@ export const KINDS = {
   dhcp: { label: 'DHCP', color: '#e0c060' },
   ip: { label: 'IP / NAT', color: '#8aa4c8' },
   local: { label: 'On the machine', color: '#7d8a99' },
+  app: { label: 'App / user', color: '#e2e8f0' },
+  cpu: { label: 'CPU work', color: '#f472b6' },
+  kernel: { label: 'Kernel / OS', color: '#c08a5a' },
+  mem: { label: 'Memory', color: '#a3e635' },
+  disk: { label: 'Disk / storage', color: '#f59e0b' },
 };
 
 export const FLOWS = [
