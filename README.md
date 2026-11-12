@@ -12,7 +12,7 @@ The look is inspired by railway stations and signalling: requests travel like tr
 
 ## What's inside
 
-The app has four tabs plus a glossary.
+The app has five sections plus a glossary.
 
 ### 1. Network Map: 52 patterns, simplest to most complex
 
@@ -48,7 +48,7 @@ A live line diagram of an architecture, with requests moving along the tracks, c
 
 ### 3. Build Your Own: a real system, on your machine
 
-A hands-on track of 12 stations. You write a real backend, run it with Docker and grow it step by step. Every station has complete, copy-ready files, the commands to run them, a checklist, "prove it works" commands and "what breaks next". Your progress is saved in the browser.
+A hands-on track in two lines: a **core line** of 12 stations that builds the system, and an **advanced line** of 10 stations that tests, measures, hardens and deploys it. You write a real backend, run it with Docker and grow it step by step. Every station has complete, copy-ready files, the commands to run them, a checklist, "prove it works" commands and "what breaks next". Your progress is saved in the browser.
 
 **Pick your language** (switch any time):
 
@@ -73,7 +73,22 @@ A hands-on track of 12 stations. You write a real backend, run it with Docker an
 11. **Infrastructure as code**: the whole stack in **Terraform or OpenTofu** (your choice, same files), with plan, apply, scaling by variable, drift detection and destroy. It runs on local Docker, so no cloud account is needed
 12. **Next stops**: read replicas, PgBouncer, CDN, sharding, the cloud
 
-Every station has been run end to end in Docker for TypeScript (Express and Fastify) and Python. The IaC station was tested with both Terraform and OpenTofu.
+Every core station has been run end to end in Docker for TypeScript (Express and Fastify) and Python. The IaC station was tested with both Terraform and OpenTofu.
+
+**The advanced line** (pick any order, once the core system runs):
+
+- **A1 Test types**: one k6 script for smoke, load, stress, spike and soak tests, with a realistic read/write mix and pass/fail thresholds
+- **A2 Measure & size**: hold a constant request rate, read CPU ms per request and memory from Prometheus, then size a real server with the Capacity page
+- **A3 SLOs & alerts**: recording rules plus alerts on error-budget burn, latency, saturated processes and dead replicas
+- **A4 Chaos**: kill replicas, freeze Redis, add network delay to Postgres, stop the database and the worker, and log what surprised you
+- **A5 Profiling**: flame graphs per language (Node inspector, py-spy, Go pprof), pg_stat_statements and EXPLAIN ANALYZE
+- **A6 Memory & event loop**: an endpoint that leaks and one that blocks the event loop, a soak test, a Runtime dashboard, finding the leak (heap snapshots, tracemalloc, pprof heap diff and goroutine dump), an out-of-memory kill, the fixes and alerts
+- **A7 CI gate**: a GitHub Actions workflow that starts the stack and fails the build when a k6 threshold fails
+- **A8 Backups**: nightly pg_dump with retention, and a restore drill that measures your recovery time
+- **A9 Deploy**: one VM with a firewall, HTTPS through Caddy, secrets, persistent data and private dashboards
+- **A10 Next stops**: tracing, logs, Alertmanager, Kubernetes, zero-downtime deploys
+
+The advanced line's configs are validated: the Prometheus rules (promtool), every k6 test type, the production and profiling Compose overrides, the Caddyfile and the CI workflow. The backup and restore drill, pg_stat_statements, EXPLAIN and the network-delay command were run for real. The cloud deploy, CI on GitHub and the language profilers were not run end to end.
 
 ### 4. Networking: what actually happens on the wire
 
@@ -98,9 +113,23 @@ Every arrow in a system design diagram is a network trip. This tab explains them
 - **16 protocol cards** (IP, TCP, UDP, QUIC, ICMP, ARP, DHCP, DNS, TLS, HTTP/1.1–3, WebSocket, gRPC, NAT, BGP): how they work, what they are used for, what to watch out for, and what their header carries.
 - **Numbers worth knowing**: round-trip times from localhost to across the world, MTU, the first TCP flight, and the ports you meet in the Build Your Own track.
 
-### Glossary: 79 terms for total beginners
+### 5. Capacity: how big a server do I need?
 
-From CPU and RAM to sharding, idempotency, stateless vs stateful servers, TCP, UDP, TLS, round trips, TTLs, DNS resolvers, BGP and anycast, event loops, the write-ahead log, monitoring and infrastructure as code. Each entry covers:
+The question every engineer has when picking a machine on AWS, Hetzner or anywhere else: will it be enough?
+
+- **The sizing loop**: estimate traffic, measure one request, calculate, load-test, buy with headroom, watch the golden signals, resize.
+- **Estimate your traffic**: rules of thumb from daily users to peak requests per second.
+- **Measure one request**: turn a constant-rate load test and `docker stats` into "CPU ms per request", with typical values by kind of endpoint.
+- **Sizing calculator**: peak users, requests per minute, spike factor, CPU per request, response time, runtime (Node, Go, Python, Java), memory per request, target CPU and N+1. It shows cores, requests in flight (Little's law), RAM, and compares 2–32 vCPU servers with CPU at peak, CPU with one server down, the shape (compute, general, memory), AWS and Hetzner examples and a monthly estimate. One click loads the result into the Simulator.
+- **Why not 100% CPU**: an interactive latency-vs-utilisation curve (the knee).
+- **The four golden signals**: latency, traffic, errors and saturation from the Google SRE book's chapter on monitoring distributed systems, with PromQL for the Build Your Own metrics, plus the RED and USE methods.
+- **Scale up, out or optimise?**: which signal means which fix.
+- **Choosing the machine**: shapes, shared vs dedicated vCPU, burstable credits, ARM, one big vs several small, and where to find them (AWS, Hetzner, Google Cloud, DigitalOcean).
+- **Checklist** before you buy, and further reading.
+
+### Glossary: 88 terms for total beginners
+
+From CPU and RAM to sharding, idempotency, stateless vs stateful servers, TCP, UDP, TLS, round trips, TTLs, DNS resolvers, BGP and anycast, event loops, the write-ahead log, SLOs and the golden signals, Little's law, load testing, backups, monitoring and infrastructure as code. Each entry covers:
 
 - where the word comes from
 - what it is and what it does
@@ -161,6 +190,7 @@ src/
 │   ├── Methodology.jsx     # "How is this calculated?" panel
 │   ├── Build.jsx           # Build Your Own tab: language picker, stations, progress
 │   ├── Networking.jsx      # Networking tab: layers, encapsulation, sequence-diagram flows
+│   ├── Capacity.jsx        # Capacity tab: sizing loop, calculator, golden signals
 │   ├── Inside.jsx          # Simulator "look inside a station" pop-up
 │   ├── Glossary.jsx        # ⓘ icons and glossary pop-ups
 │   └── ui.jsx              # Sliders, toggles, popovers, sparklines
@@ -170,15 +200,17 @@ src/
 │   ├── journey.js          # Build track: stations and all code (TS, Python, Go,
 │   │                       #   Docker, NGINX, Prometheus, Grafana, Terraform)
 │   ├── networking.js       # Layers, flows, protocols and network numbers
+│   ├── capacity.js         # Sizing model, runtimes, signals, machine shapes
+│   ├── advanced.js         # Build track: the 10 advanced stations
 │   ├── internals.js        # What happens inside each station, per technology
-│   └── glossary.js         # The 79 glossary terms
+│   └── glossary.js         # The 88 glossary terms
 ├── sim/
 │   ├── model.js            # Capacity model, prices, advisor, breaking-point search
 │   └── tech.js             # Technology choices and station explanations
 └── styles.css              # Dark theme and layout
 ```
 
-**Tech stack:** Vite + React 18, no other runtime dependencies. All diagrams are hand-drawn SVG; there is no chart or diagram library. To use your own cloud provider's prices, edit the `PRICES` table in `src/sim/model.js`.
+**Tech stack:** Vite + React 18, plus Prism for code highlighting in Build Your Own; no other runtime dependencies. All diagrams are hand-drawn SVG; there is no chart or diagram library. To use your own cloud provider's prices, edit the `PRICES` table in `src/sim/model.js`.
 
 ---
 

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { IAC_TOOLS, LANGS, STEPS, forLang, iacText } from '../data/journey.js';
+import { ADV_STEPS } from '../data/advanced.js';
 import { GLOSSARY } from '../data/glossary.js';
 import { PATTERNS } from '../data/patterns.js';
 import { Info, useGlossary } from './Glossary.jsx';
+import { highlight, highlightCommand, langForPath } from './highlight.js';
 
 const STORE_KEY = 'scalestation.build';
 
@@ -14,28 +16,47 @@ function loadProgress() {
       return {
         lang: LANGS.some((l) => l.id === lang) ? lang : null,
         current: STEPS.some((x) => x.id === s.current) ? s.current : STEPS[0].id,
+        advCurrent: ADV_STEPS.some((x) => x.id === s.advCurrent) ? s.advCurrent : ADV_STEPS[0].id,
+        track: s.track === 'advanced' ? 'advanced' : 'core',
         done: s.done || {},
         iac: s.iac || 'terraform',
       };
     }
   } catch { /* storage unavailable */ }
-  return { lang: null, current: STEPS[0].id, done: {}, iac: 'terraform' };
+  return { lang: null, current: STEPS[0].id, advCurrent: ADV_STEPS[0].id, track: 'core', done: {}, iac: 'terraform' };
 }
 
-export default function Build({ onTrySim, onOpenPattern }) {
+// The two lines of the Build track: the core system, then running it for real.
+const TRACKS = {
+  core: { list: STEPS, key: 'current', label: 'Core line', sub: 'build and grow the system', prefix: 'STATION ', num: (i) => i + 1 },
+  advanced: { list: ADV_STEPS, key: 'advCurrent', label: 'Advanced line', sub: 'test, measure, harden and deploy it', prefix: 'ADVANCED A', num: (i) => `A${i + 1}` },
+};
+
+export default function Build({ onTrySim, onOpenPattern, openRequest, onCapacity }) {
   const [state, setState] = useState(loadProgress);
   useEffect(() => {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* storage unavailable */ }
   }, [state]);
 
+  // Another page asked for a specific station (e.g. Capacity → "Advanced A2").
+  useEffect(() => {
+    if (!openRequest?.id) return;
+    const track = ADV_STEPS.some((x) => x.id === openRequest.id) ? 'advanced' : 'core';
+    setState((s) => ({ ...s, track, [TRACKS[track].key]: openRequest.id }));
+    setTimeout(() => document.querySelector('.track-pick')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }, [openRequest]);
+
   const lang = state.lang;
-  const idx = Math.max(0, STEPS.findIndex((s) => s.id === state.current));
-  const step = STEPS[idx];
+  const T = TRACKS[state.track] || TRACKS.core;
+  const LIST = T.list;
+  const idx = Math.max(0, LIST.findIndex((s) => s.id === state[T.key]));
+  const step = LIST[idx];
   const isDone = (s) => (state.done[s.id] || []).length >= s.tasks.length;
-  const doneCount = STEPS.filter(isDone).length;
+  const doneCount = LIST.filter(isDone).length;
+  const setTrack = (track) => setState((s) => ({ ...s, track }));
 
   const go = (id) => {
-    setState((s) => ({ ...s, current: id }));
+    setState((s) => ({ ...s, [T.key]: id }));
     document.querySelector('.build-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const toggleTask = (i) => setState((s) => {
@@ -50,7 +71,7 @@ export default function Build({ onTrySim, onOpenPattern }) {
   useEffect(() => { if (isNode) setLastNode(lang); }, [lang, isNode]);
   const reset = () => {
     if (window.confirm('Reset your progress on every station? Your chosen language stays.')) {
-      setState((s) => ({ ...s, current: STEPS[0].id, done: {} }));
+      setState((s) => ({ ...s, current: STEPS[0].id, advCurrent: ADV_STEPS[0].id, done: {} }));
     }
   };
 
@@ -58,14 +79,14 @@ export default function Build({ onTrySim, onOpenPattern }) {
     <div className="build-page">
       <section className="hero build-hero">
         <div>
-          <div className="eyebrow mono">BUILD YOUR OWN · {STEPS.length} STATIONS · ON YOUR OWN MACHINE</div>
+          <div className="eyebrow mono">BUILD YOUR OWN · {STEPS.length} + {ADV_STEPS.length} STATIONS · ON YOUR OWN MACHINE</div>
           <h1>Build and grow your own system, step by step.</h1>
           <p className="lede">Write a real backend in the language you choose, run it with Docker, and grow it from one server to a load-balanced, cached, queue-backed system. Every station ends with commands that <b>prove</b> it works, and with what breaks next.</p>
         </div>
         <div className="build-progress">
-          <div className="mono dim small">YOUR PROGRESS</div>
-          <div className="build-progress-num mono">{doneCount}<span className="dim"> / {STEPS.length}</span></div>
-          <div className="build-bar"><i style={{ width: `${(doneCount / STEPS.length) * 100}%` }} /></div>
+          <div className="mono dim small">YOUR PROGRESS · {T.label.toUpperCase()}</div>
+          <div className="build-progress-num mono">{doneCount}<span className="dim"> / {LIST.length}</span></div>
+          <div className="build-bar"><i style={{ width: `${(doneCount / LIST.length) * 100}%` }} /></div>
           <button className="btn ghost small" onClick={reset}>Reset progress</button>
         </div>
       </section>
@@ -93,16 +114,31 @@ export default function Build({ onTrySim, onOpenPattern }) {
         <p className="dim small lang-note">You also need <b>Docker</b> (from station 2) and <b>k6</b> for load tests. For Node.js, pick <b>Express</b> (the classic, most tutorials use it) or <b>Fastify</b> (faster, schema-first). Prefer another language? The HTTP endpoints are the same in every version (<span className="mono">GET /products/:id</span>, <span className="mono">GET /visit/:user</span>, <span className="mono">POST /orders</span>, <span className="mono">GET /metrics</span>), so you can follow along in any language and copy the Docker, NGINX, Grafana, Terraform and k6 files as they are.</p>
       </section>
 
-      <SystemLine steps={STEPS} isDone={isDone} current={step.id} onGo={go} />
+      <section className="track-pick" aria-label="Choose a line">
+        {Object.entries(TRACKS).map(([id, tr]) => {
+          const n = tr.list.filter(isDone).length;
+          return (
+            <button key={id} className={`track-card ${state.track === id ? 'on' : ''}`} onClick={() => setTrack(id)} aria-pressed={state.track === id}>
+              <span className="track-top"><b>{tr.label}</b><span className="mono dim">{n}/{tr.list.length} done</span></span>
+              <span className="dim small">{tr.list.length} stations · {tr.sub}</span>
+            </button>
+          );
+        })}
+      </section>
+      {state.track === 'advanced' && (
+        <p className="dim small track-note">The advanced line starts from the finished core system: the Compose stack from station 9 (NGINX on :8080, 3 app replicas, worker, Postgres, Redis, Prometheus and Grafana) running in <span className="mono">my-system/</span>, plus k6. Stations can be done in any order.</p>
+      )}
+
+      <SystemLine steps={LIST} num={T.num} isDone={isDone} current={step.id} onGo={go} />
 
       <div className="build-grid">
         <nav className="build-route panel" aria-label="Stations">
-          <div className="panel-label mono">2 · RIDE THE LINE</div>
+          <div className="panel-label mono">2 · RIDE THE {T.label.toUpperCase()}</div>
           <ol>
-            {STEPS.map((s, i) => (
+            {LIST.map((s, i) => (
               <li key={s.id}>
                 <button className={`route-stop ${s.id === step.id ? 'on' : ''} ${isDone(s) ? 'done' : ''}`} onClick={() => go(s.id)}>
-                  <span className="route-dot">{isDone(s) ? '✓' : i + 1}</span>
+                  <span className="route-dot">{isDone(s) ? '✓' : T.num(i)}</span>
                   <span className="route-text">
                     <span className="route-title">{s.title}</span>
                     <span className="route-sub mono">{(state.done[s.id] || []).length}/{s.tasks.length} tasks</span>
@@ -120,9 +156,11 @@ export default function Build({ onTrySim, onOpenPattern }) {
               <p className="dim">Choose Node.js, Python or Go above. All code and commands on every station switch to it.</p>
             </div>
           ) : (
-            <Station step={step} index={idx} lang={lang} iac={state.iac} onIac={setIac} done={state.done[step.id] || []} onToggle={toggleTask}
-              onPrev={idx > 0 ? () => go(STEPS[idx - 1].id) : null}
-              onNext={idx < STEPS.length - 1 ? () => go(STEPS[idx + 1].id) : null}
+            <Station step={step} index={idx} total={LIST.length} prefix={T.prefix} label={T.num(idx)} lang={lang} iac={state.iac} onIac={setIac} done={state.done[step.id] || []} onToggle={toggleTask}
+              onPrev={idx > 0 ? () => go(LIST[idx - 1].id) : null}
+              onNext={idx < LIST.length - 1 ? () => go(LIST[idx + 1].id) : null}
+              onAdvanced={state.track === 'core' && idx === LIST.length - 1 ? () => { setTrack('advanced'); document.querySelector('.track-pick')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } : null}
+              onCapacity={onCapacity}
               onTrySim={onTrySim} onOpenPattern={onOpenPattern} />
           )}
         </main>
@@ -131,7 +169,7 @@ export default function Build({ onTrySim, onOpenPattern }) {
   );
 }
 
-function SystemLine({ steps, isDone, current, onGo }) {
+function SystemLine({ steps, num = (i) => i + 1, isDone, current, onGo }) {
   return (
     <section className="sysline panel" aria-label="Your system so far">
       <div className="panel-label mono">YOUR SYSTEM SO FAR <Info term="horizontal" label="scaling" /></div>
@@ -140,7 +178,7 @@ function SystemLine({ steps, isDone, current, onGo }) {
           <button key={s.id} className={`sys-stop ${isDone(s) ? 'done' : ''} ${s.id === current ? 'on' : ''}`} onClick={() => onGo(s.id)} title={s.title}>
             <span className="sys-dot" />
             <span className="sys-label">{s.short}</span>
-            <span className="sys-num mono">{i + 1}</span>
+            <span className="sys-num mono">{num(i)}</span>
           </button>
         ))}
       </div>
@@ -148,7 +186,9 @@ function SystemLine({ steps, isDone, current, onGo }) {
   );
 }
 
-function Station({ step, index, lang, iac, onIac, done, onToggle, onPrev, onNext, onTrySim, onOpenPattern }) {
+const CAPACITY_LINKS = new Set(['adv-measure', 'adv-deploy']);
+
+function Station({ step, index, total, prefix, label, lang, iac, onIac, done, onToggle, onPrev, onNext, onAdvanced, onCapacity, onTrySim, onOpenPattern }) {
   const { open } = useGlossary();
   const t = (text) => iacText(text, iac);
   const files = step.files.filter((f) => forLang(f.lang, lang));
@@ -162,7 +202,7 @@ function Station({ step, index, lang, iac, onIac, done, onToggle, onPrev, onNext
   return (
     <article className="station-page">
       <header className="panel station-head">
-        <div className="mono eyebrow">STATION {index + 1} OF {STEPS.length} · {langLabel}</div>
+        <div className="mono eyebrow">{prefix}{prefix.endsWith('A') ? index + 1 : label} OF {total} · {langLabel}</div>
         <h2>{step.title}{allDone && <span className="station-done mono">✓ done</span>}</h2>
         <p className="lede">{step.goal}</p>
         <div className="why"><b>Why it matters:</b> {step.why}</div>
@@ -189,7 +229,8 @@ function Station({ step, index, lang, iac, onIac, done, onToggle, onPrev, onNext
               return pat && <button key={p} className="chip" onClick={() => onOpenPattern(p)}>{pat.title} ↗</button>;
             })}
           </div>
-          {step.sim && <button className="btn primary small" onClick={() => onTrySim(step.sim, `Build station ${index + 1}: ${step.title}`)}>Try this stage in the Simulator →</button>}
+          {step.sim && <button className="btn primary small" onClick={() => onTrySim(step.sim, `Build station ${label}: ${step.title}`)}>Try this stage in the Simulator →</button>}
+          {onCapacity && CAPACITY_LINKS.has(step.id) && <button className="btn small" onClick={onCapacity}>Open the Capacity calculator →</button>}
         </div>
       </header>
 
@@ -239,7 +280,9 @@ function Station({ step, index, lang, iac, onIac, done, onToggle, onPrev, onNext
 
       <footer className="station-nav">
         <button className="btn ghost" disabled={!onPrev} onClick={onPrev || undefined}>← Previous station</button>
-        <button className="btn primary" disabled={!onNext} onClick={onNext || undefined}>{onNext ? 'Next station →' : 'End of the line 🎉'}</button>
+        {onNext || !onAdvanced
+          ? <button className="btn primary" disabled={!onNext} onClick={onNext || undefined}>{onNext ? 'Next station →' : 'End of the line 🎉'}</button>
+          : <button className="btn primary" onClick={onAdvanced}>Continue on the Advanced line →</button>}
       </footer>
     </article>
   );
@@ -248,6 +291,9 @@ function Station({ step, index, lang, iac, onIac, done, onToggle, onPrev, onNext
 function CodeBlock({ title, note, code, terminal, tone }) {
   const [copied, setCopied] = useState(false);
   const lines = useMemo(() => code.replace(/\n$/, '').split('\n'), [code]);
+  // Highlighted HTML for files (Prism escapes the source, so this is safe).
+  const lang = terminal ? 'bash' : langForPath(title);
+  const html = useMemo(() => (terminal ? null : highlight(code, lang)), [code, lang, terminal]);
   const copy = async () => {
     const text = terminal ? lines.filter((l) => !l.trim().startsWith('#')).map((l) => l.replace(/\s+#.*$/, '')).join('\n') : code;
     try {
@@ -263,7 +309,15 @@ function CodeBlock({ title, note, code, terminal, tone }) {
         {note && <span className="code-note">{note}</span>}
         <button className="btn ghost small code-copy" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
       </div>
-      <pre><code>{terminal ? lines.map((l, i) => <span key={i} className={l.trim().startsWith('#') ? 'cmt' : ''}>{l.trim().startsWith('#') ? l : `$ ${l}`}{'\n'}</span>) : code}</code></pre>
+      {terminal ? (
+        <pre className="language-bash"><code>{lines.map((l, i) => (l.trim().startsWith('#')
+          ? <span key={i} className="cmt">{l}{'\n'}</span>
+          : <span key={i}><span className="prompt">$ </span><span dangerouslySetInnerHTML={{ __html: highlightCommand(l) }} />{'\n'}</span>))}</code></pre>
+      ) : html ? (
+        <pre className={`language-${lang}`}><code dangerouslySetInnerHTML={{ __html: html }} /></pre>
+      ) : (
+        <pre><code>{code}</code></pre>
+      )}
     </div>
   );
 }
