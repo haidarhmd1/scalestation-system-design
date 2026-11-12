@@ -12,6 +12,10 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Cloudflare secrets live in this environment, which only main may deploy to.
+    environment:
+      name: production
+      url: https://scalestation.haidarhmd.com
     permissions:
       contents: read
     steps:
