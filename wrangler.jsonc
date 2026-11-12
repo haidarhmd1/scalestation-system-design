@@ -10,7 +10,7 @@
   // Custom Domain: Cloudflare creates the DNS record and an edge certificate
   // for this hostname automatically (haidarhmd.com must be a zone in the same account).
   "routes": [
-    { "pattern": "scalestation.labs.haidarhmd.com", "custom_domain": true }
+    { "pattern": "scalestation.haidarhmd.com", "custom_domain": true }
   ],
   // Keep the default *.workers.dev URL off; the custom domain is the only entry point.
   "workers_dev": false
