@@ -3,6 +3,7 @@ import Catalogue from './components/Catalogue.jsx';
 import Simulator from './components/Simulator.jsx';
 import Build from './components/Build.jsx';
 import Networking from './components/Networking.jsx';
+import Capacity from './components/Capacity.jsx';
 import { GlossaryProvider, useGlossary } from './components/Glossary.jsx';
 
 function GlossaryButton() {
@@ -15,6 +16,7 @@ const readTab = () => {
   if (h.startsWith('#sim')) return 'sim';
   if (h.startsWith('#build')) return 'build';
   if (h.startsWith('#net')) return 'net';
+  if (h.startsWith('#cap')) return 'cap';
   return 'atlas';
 };
 
@@ -24,6 +26,8 @@ export default function App() {
   const [patternRequest, setPatternRequest] = useState(null);
   const trySim = (patch, name) => { setPreset({ patch, name, key: Date.now() }); go('sim'); };
   const openPattern = (id) => { setPatternRequest({ id, key: Date.now() }); go('atlas'); };
+  const [buildRequest, setBuildRequest] = useState(null);
+  const openBuild = (id) => { setBuildRequest({ id, key: Date.now() }); go('build'); };
 
   useEffect(() => {
     const on = () => setTab(readTab());
@@ -62,13 +66,18 @@ export default function App() {
             <svg className="net-ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.4" d="M2 3.5h12M2 8h12M2 12.5h12" /><circle cx="5" cy="3.5" r="1.4" fill="currentColor" /><circle cx="10.5" cy="8" r="1.4" fill="currentColor" /><circle cx="7" cy="12.5" r="1.4" fill="currentColor" /></svg>
             Networking
           </button>
+          <button className={`btn ghost small gl-open net-open ${tab === 'cap' ? 'on' : ''}`} onClick={() => go('cap')} aria-current={tab === 'cap' ? 'page' : undefined}>
+            <svg className="net-ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" d="M2.5 11.5a5.5 5.5 0 1 1 11 0" /><path stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" d="M8 11.5l3-4" /><circle cx="8" cy="11.5" r="1.3" fill="currentColor" /></svg>
+            Capacity
+          </button>
           <GlossaryButton />
         </div>
       </nav>
       {tab === 'atlas' && <Catalogue onTrySim={trySim} openRequest={patternRequest} onBuild={() => go('build')} onNetworking={() => go('net')} />}
       {tab === 'sim' && <Simulator preset={preset} />}
-      {tab === 'build' && <Build onTrySim={trySim} onOpenPattern={openPattern} />}
+      {tab === 'build' && <Build onTrySim={trySim} onOpenPattern={openPattern} openRequest={buildRequest} onCapacity={() => go('cap')} />}
       {tab === 'net' && <Networking onOpenPattern={openPattern} />}
+      {tab === 'cap' && <Capacity onTrySim={trySim} onOpenBuild={openBuild} />}
       <footer className="site-foot">
         <div className="foot-brand">
           <span className="brand-signal"><i /><i /><i /></span>

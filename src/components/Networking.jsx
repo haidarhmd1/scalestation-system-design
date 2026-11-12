@@ -26,7 +26,7 @@ const SECTIONS = [
 const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
 // Which sections are open. All start collapsed so the page isn't overwhelming.
-const FoldCtx = createContext({ isOpen: () => true, toggle: () => {} });
+export const FoldCtx = createContext({ isOpen: () => true, toggle: () => {} });
 
 export default function Networking({ onOpenPattern }) {
   const [flowId, setFlowId] = useState(FLOWS[0].id);
@@ -43,7 +43,7 @@ export default function Networking({ onOpenPattern }) {
 
   return (
     <FoldCtx.Provider value={fold}>
-    <div className="net-page">
+    <div className="net-page calm">
       <section className="hero net-hero">
         <div>
           <div className="eyebrow mono">NETWORKING · 7 LAYERS · {FLOWS.length} FLOWS · {PROTOCOLS.length} PROTOCOLS</div>
@@ -55,7 +55,7 @@ export default function Networking({ onOpenPattern }) {
         </div>
         <nav className="net-toc" aria-label="On this page">
           {SECTIONS.map(([id, label], i) => (
-            <button key={id} className={`legend-row ${open.has(id) ? 'is-open' : ''}`} onClick={() => reveal(id)}>
+            <button key={id} className={`legend-row ${open.has(id) ? 'is-open' : ''}`} onClick={() => reveal(id)} style={{ '--c': LINE_COLORS[i % LINE_COLORS.length] }}>
               <span className="legend-line" />
               <span className="mono">{String(i + 1).padStart(2, '0')}</span>
               <span>{label}</span>
@@ -80,12 +80,18 @@ export default function Networking({ onOpenPattern }) {
 
 // Section header doubles as the collapse toggle; the rest of the section
 // is hidden by CSS while it is closed (kept mounted, so state survives).
-function SectionHead({ id, n, title, children }) {
+// One colour per section, the same palette as the Network Map lines.
+export const LINE_COLORS = ['#3ddc84', '#4da3ff', '#ffb020', '#c792ea', '#ff5f7e', '#2dd4bf', '#ff9f43', '#a3e635', '#5ee0ff'];
+
+export function SectionHead({ id, n, title, children }) {
   const { isOpen, toggle } = useContext(FoldCtx);
   const open = isOpen(id);
+  const color = LINE_COLORS[(Number(n) - 1) % LINE_COLORS.length] || LINE_COLORS[1];
   return (
-    <header className={`net-sec-head ${open ? 'open' : 'closed'}`} id={id}>
-      <button type="button" className="net-sec-toggle" onClick={() => toggle(id)} aria-expanded={open} aria-controls={`${id}-body`}>
+    // The whole card toggles. The button inside has no handler of its own: its
+    // clicks (and Enter/Space) bubble up here, so keyboard users still get it.
+    <header className={`net-sec-head ${open ? 'open' : 'closed'}`} id={id} onClick={() => toggle(id)} style={{ '--line': color }}>
+      <button type="button" className="net-sec-toggle" aria-expanded={open} aria-controls={`${id}-body`}>
         <span className="line-badge mono">{n}</span>
         <h2>{title}</h2>
         <span className="net-sec-chev mono">{open ? 'Hide' : 'Show'} <i aria-hidden="true">▾</i></span>
