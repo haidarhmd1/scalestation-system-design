@@ -1,0 +1,17 @@
+{
+  // Cloudflare Workers static-assets deployment for ScaleStation.
+  // Deployed by .github/workflows/deploy.yml on every push to main.
+  "name": "scalestation",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  // Custom Domain: Cloudflare creates the DNS record and an edge certificate
+  // for this hostname automatically (haidarhmd.com must be a zone in the same account).
+  "routes": [
+    { "pattern": "scalestation.labs.haidarhmd.com", "custom_domain": true }
+  ],
+  // Keep the default *.workers.dev URL off; the custom domain is the only entry point.
+  "workers_dev": false
+}
