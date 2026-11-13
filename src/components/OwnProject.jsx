@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import CodeBlock from './CodeBlock.jsx';
 import { STUDIO } from '../studio.js';
 
@@ -6,6 +7,13 @@ import { STUDIO } from '../studio.js';
 export const CLI_PUBLISHED = false;
 
 const STEPS = [
+  {
+    title: '0 · Try it on a demo first (optional)',
+    text: 'A small but real shop (Express + Postgres) that starts with one server and one database. Load-test it, break it on the map, then follow the “How to add this” guides to grow it for real: a cache, a message queue, more servers, read replicas, sharding and more.',
+    blocks: [
+      { terminal: true, title: 'terminal', code: 'npx scalestation demo my-shop\ncd my-shop\ndocker compose up --build -d\nnpx scalestation' },
+    ],
+  },
   {
     title: '1 · Add it to your project',
     text: 'A dev dependency, like Prisma Studio or Storybook. Not a Node.js project (Python, Go, Java…)? Use npx: it needs only Node.js installed and adds nothing to your repo.',
@@ -23,7 +31,7 @@ const STEPS = [
   },
   {
     title: '3 · Open your system in the simulator',
-    text: 'Starts a local site (only on 127.0.0.1) with your own system on the map. From there you run the k6 test against your app, watch req/s, p95 and errors per endpoint live, and see where it breaks. One click calibrates the simulator with your measured numbers, so the what-ifs (more servers, a cache, a replica) describe your app, not a textbook one.',
+    text: 'Starts a local site (only on 127.0.0.1) with your own system on the map. From there you run the k6 test against your app, watch req/s, p95 and errors per endpoint live, and see where it breaks. One click calibrates the simulator with your measured numbers, so the what-ifs (more servers, a cache, a replica) describe your app, not a textbook one. Every change you make on the map gets a “How to add this” guide for your stack: compose file, package, code, and how to check it helped.',
     blocks: [
       { terminal: true, title: 'terminal', code: 'npm run scale\n# opens http://localhost:5190' },
     ],
@@ -99,7 +107,7 @@ export function OwnProjectHint({ compact = false }) {
         </div>
         <button className={`btn small ${compact ? 'full' : ''}`} onClick={() => setOpen(true)}>Show me how →</button>
       </div>
-      {open && <HowModal onClose={() => setOpen(false)} />}
+      {open && createPortal(<HowModal onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }

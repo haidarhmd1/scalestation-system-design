@@ -145,6 +145,9 @@ Already have a system? The **Show me how** cards in Build Your Own and in the Si
 - the user's system drawn on the simulator map
 - a live k6 load test against their running app, with findings (CPU-bound, event loop blocked, memory growing, slowest endpoint)
 - **Calibrate**, which replaces the textbook numbers with measured ones
+- `npx scalestation demo` copies a small Express + Postgres shop to practise on first
+
+**How to add this.** The Simulator remembers the layout it started from (a scenario, a pattern preset, or in studio mode the user's own project). Every change since then (cache, queue with BullMQ / RabbitMQ / Kafka, more servers, proxy, pooler, read replicas, sharding, CDN, rate limiting, sessions, auto-scaling, circuit breaker, regions, machine sizes) is listed in the sidebar. Each one has a step-by-step guide in Node.js, Python or Go: the compose service, the package, the code, pitfalls, and how to check it helped. The guides live in `src/data/howto.js`. The Node.js cache and Kafka guides were applied to the demo shop as written and tested.
 
 Studio mode is the same code, built with `vite build --mode studio` (`src/studio.js`). The public site never calls the CLI's API. Set `CLI_PUBLISHED` in `src/components/OwnProject.jsx` to `true` once the CLI is on npm.
 
@@ -203,6 +206,7 @@ src/
 │   ├── Capacity.jsx        # Capacity tab: sizing loop, calculator, golden signals
 │   ├── Inside.jsx          # Simulator "look inside a station" pop-up
 │   ├── OwnProject.jsx      # "Simulate your own project" hint + how-to pop-up
+│   ├── HowTo.jsx           # "What you changed" box + step-by-step "How to add this" guides
 │   ├── Project.jsx         # Studio mode only: Your Project tab (scan, k6 test, calibrate)
 │   ├── CodeBlock.jsx       # Highlighted file / terminal snippets with a copy button
 │   ├── Glossary.jsx        # ⓘ icons and glossary pop-ups
@@ -216,6 +220,7 @@ src/
 │   ├── capacity.js         # Sizing model, runtimes, signals, machine shapes
 │   ├── advanced.js         # Build track: the 10 advanced stations
 │   ├── internals.js        # What happens inside each station, per technology
+│   ├── howto.js            # "How to add this" guides per change, in Node.js / Python / Go
 │   └── glossary.js         # The 88 glossary terms
 ├── sim/
 │   ├── model.js            # Capacity model, prices, advisor, breaking-point search

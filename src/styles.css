@@ -1182,3 +1182,40 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 
 .proj-next { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 .proj-next b { color: var(--text); }
 @media (max-width: 860px) { .proj-controls, .proj-result { grid-template-columns: minmax(0, 1fr); } .proj-go { padding-top: 0; } }
+
+/* "How to add this" — changes box in the simulator sidebar + guide modal */
+.changes-box { display: flex; flex-direction: column; gap: 8px; margin: 18px 0 4px; padding: 12px; border: 1px solid var(--border2); border-left: 4px solid var(--amber); border-radius: 10px; background: var(--panel2); }
+.changes-box .panel-label { margin: 0; color: var(--amber); }
+.changes-box p { margin: 0; }
+.changes-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.changes-box li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.changes-label { font-size: 12.5px; min-width: 0; }
+.changes-box li .btn { flex-shrink: 0; }
+.howto-modal { width: min(1100px, 100%); --line: var(--amber); }
+.howto-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.howto-layout:not(:has(.howto-nav)) { grid-template-columns: minmax(0, 1fr); }
+.howto-nav { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-right: 1px solid var(--border); overflow: auto; }
+.howto-nav button { text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 8px; color: var(--dim); cursor: pointer; font: inherit; font-size: 13px; }
+.howto-nav button:hover { background: var(--panel); color: var(--text); }
+.howto-nav button.on { background: var(--panel2); color: var(--text); box-shadow: inset 3px 0 0 var(--amber); }
+.howto-body { overflow: auto; padding: 16px 24px 24px; }
+.howto-runtime { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.howto-runtime .seg { margin-top: 0; }
+.howto-intro { margin: 14px 0 0; font-size: 14.5px; }
+.howto-steps { list-style: none; margin: 0; padding: 0; }
+.howto-steps li { display: block; margin-top: 22px; }
+.howto-steps h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 16px; }
+.howto-steps p { margin: 0; }
+.howto-num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--amber); color: #1a1205; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.howto-pitfalls { margin-top: 24px; padding: 12px 14px; border: 1px solid #5a4a1c; background: rgba(255, 176, 32, 0.06); border-radius: 10px; }
+.howto-pitfalls ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #f3d48a; font-size: 13px; }
+.howto-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.howto-foot p { margin: 0; }
+.howto-pager { display: flex; gap: 8px; flex-shrink: 0; }
+@media (max-width: 760px) {
+  .howto-layout { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .howto-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .howto-nav button { white-space: nowrap; }
+  .howto-body { overflow: visible; }
+  .howto-foot { flex-direction: column; align-items: stretch; }
+}

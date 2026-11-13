@@ -8,6 +8,7 @@ import { Info, NeedLists, Term } from './Glossary.jsx';
 import Methodology from './Methodology.jsx';
 import { termsIn } from '../data/glossary.js';
 import { OwnProjectHint } from './OwnProject.jsx';
+import { ChangesBox } from './HowTo.jsx';
 
 const TICK_MS = 250;
 const SPEEDS = [{ value: 2, label: '1×' }, { value: 10, label: '5×' }, { value: 40, label: '20×' }];
@@ -38,6 +39,9 @@ export default function Simulator({ preset, studio }) {
   const [cfg, setCfg] = useState(() => withPreset(preset?.patch));
   const [sim, setSim] = useState(() => freshSim(withPreset(preset?.patch)));
   const [saved, setSaved] = useState(null);
+  // The layout things started from (a preset, a scenario or the user's project):
+  // every change since then gets a "How to add this" guide.
+  const [baseline, setBaseline] = useState(() => withPreset(preset?.patch));
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(2);
   const [selected, setSelected] = useState('app');
@@ -89,6 +93,7 @@ export default function Simulator({ preset, studio }) {
     if (!preset) return;
     const next = withPreset(preset.patch, preset.patch.tech ? TECH_DEFAULTS : cfgRef.current.tech);
     setCfg(next);
+    setBaseline(next);
     setSim(addLog(freshSim(next), 'info', `Loaded layout: ${preset.name}`));
     setBp(null);
   }, [preset]);
@@ -185,6 +190,7 @@ export default function Simulator({ preset, studio }) {
     const sc = SCENARIOS.find((x) => x.id === id);
     if (!sc) return;
     setCfg({ ...sc.patch, tech: cfg.tech });
+    setBaseline({ ...sc.patch, tech: cfg.tech });
     setSim(addLog(freshSim(sc.patch), 'info', `Scenario: ${sc.name}. ${sc.desc}`));
     setBp(null);
   };
@@ -271,6 +277,7 @@ export default function Simulator({ preset, studio }) {
             ))}
           </div>
           <Segmented info="region" label="Regions (multi-region active-active)" value={cfg.regions} onChange={(v) => update({ regions: v }, `Regions → ${v}`)} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} />
+          <ChangesBox base={baseline} cfg={cfg} studio={Boolean(studio)} onReset={() => { setCfg(baseline); setSim((s) => addLog(s, 'info', 'Back to the starting layout')); setBp(null); }} />
           {!studio && <OwnProjectHint compact />}
           </>)}
         </aside>
