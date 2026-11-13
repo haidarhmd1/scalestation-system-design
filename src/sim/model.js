@@ -40,6 +40,9 @@ export const DEFAULT_CONFIG = {
   workers: 2,
   breaker: false,
   tech: { ...TECH_DEFAULTS },
+  // Measured numbers from a real load test (set by the ScaleStation CLI).
+  // null = use the textbook assumptions below.
+  calib: null,
 };
 
 const q = (rho) => 1 / (1 - Math.min(rho, 0.97));
@@ -81,8 +84,9 @@ export const PROXY_MEM_BOOST = 1.3;
 export const PROXY_NODE_CAP = 12000; // static/proxy req/s per server
 export const PROXY_STATIC_SHARE = 0.9; // static requests served by the proxy
 
-export function serverCapacity(vcpu, ram, proxy = false) {
-  const cpu = Math.pow(vcpu, 0.9) * PER_CORE_RPS * (proxy ? PROXY_CPU_BOOST : 1);
+export function serverCapacity(vcpu, ram, proxy = false, calib = null) {
+  const perCore = calib?.perCoreRps || PER_CORE_RPS;
+  const cpu = Math.pow(vcpu, 0.9) * perCore * (proxy ? PROXY_CPU_BOOST : 1);
   const mem = Math.max(0, ram - 0.5) * RPS_PER_GB * (proxy ? PROXY_MEM_BOOST : 1);
   return { cap: Math.min(cpu, mem), cpu, mem, bound: cpu <= mem ? 'CPU' : 'RAM' };
 }
@@ -151,7 +155,7 @@ export function compute(cfg, rt = {}) {
   const appWork = appDyn + (appStatic - proxyStatic) * 0.3;
 
   // App tier
-  const sc = serverCapacity(cfg.vcpu, cfg.ram, cfg.proxy);
+  const sc = serverCapacity(cfg.vcpu, cfg.ram, cfg.proxy, cfg.calib);
   const sticky = cfg.sessions === 'sticky' || (cfg.lb && cfg.lbAlgo === 'ip-hash');
   const balance = effServers > 1 ? (sticky ? 0.85 : cfg.lbAlgo === 'least-conn' ? 1.04 : 1) : 1;
   const appCapBase = effServers * sc.cap * balance;
@@ -235,7 +239,7 @@ export function compute(cfg, rt = {}) {
 
   // Latency
   const net = R >= 3 ? 35 : R === 2 ? 70 : 110;
-  const appLat = 18 * q(appRho);
+  const appLat = (cfg.calib?.appMs || 18) * q(appRho);
   const dbReadLat = (6 / db.ramFactor) * q(d.readRho);
   const readLat = cfg.cache ? 0.5 + (1 - hit) * dbReadLat : dbReadLat;
   const writeLat = cfg.queue ? 4 : 10 * q(d.primaryRho);

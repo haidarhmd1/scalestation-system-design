@@ -5,6 +5,8 @@ import Build from './components/Build.jsx';
 import Networking from './components/Networking.jsx';
 import Capacity from './components/Capacity.jsx';
 import { GlossaryProvider, useGlossary } from './components/Glossary.jsx';
+import Project from './components/Project.jsx';
+import { STUDIO, api, layoutOf } from './studio.js';
 
 function GlossaryButton() {
   const { openIndex } = useGlossary();
@@ -17,6 +19,7 @@ const readTab = () => {
   if (h.startsWith('#build')) return 'build';
   if (h.startsWith('#net')) return 'net';
   if (h.startsWith('#cap')) return 'cap';
+  if (STUDIO && (h.startsWith('#project') || !h || h === '#')) return 'project';
   return 'atlas';
 };
 
@@ -28,6 +31,25 @@ export default function App() {
   const openPattern = (id) => { setPatternRequest({ id, key: Date.now() }); go('atlas'); };
   const [buildRequest, setBuildRequest] = useState(null);
   const openBuild = (id) => { setBuildRequest({ id, key: Date.now() }); go('build'); };
+
+  // Studio mode: the user's own project, served by the scalestation CLI.
+  const [project, setProject] = useState(null);
+  const [projectErr, setProjectErr] = useState(null);
+  useEffect(() => {
+    if (!STUDIO) return;
+    api.project().then((p) => {
+      setProject(p);
+      setPreset({ patch: layoutOf(p), name: p.name, key: Date.now() }); // the Simulator opens on their system
+    }).catch((e) => setProjectErr(e.message));
+  }, []);
+  const studio = STUDIO && project ? {
+    name: project.name,
+    onSave: async (cfg) => {
+      const { calib, ...layout } = cfg;
+      await api.saveLayout(layout);
+      setProject((p) => ({ ...p, simulator: layout }));
+    },
+  } : null;
 
   useEffect(() => {
     const on = () => setTab(readTab());
@@ -48,9 +70,14 @@ export default function App() {
         <div className="brand">
           <span className="brand-signal"><i /><i /><i /></span>
           <span className="brand-name">SCALESTATION</span>
-          <span className="brand-sub mono">system design simulator</span>
+          <span className="brand-sub mono">{STUDIO ? `studio · ${project?.name || 'your project'}` : 'system design simulator'}</span>
         </div>
         <div className="tabs" role="tablist">
+          {STUDIO && (
+            <button role="tab" aria-selected={tab === 'project'} className={tab === 'project' ? 'on' : ''} onClick={() => go('project')}>
+              <span className="mono">00</span> Your Project
+            </button>
+          )}
           <button role="tab" aria-selected={tab === 'atlas'} className={tab === 'atlas' ? 'on' : ''} onClick={() => go('atlas')}>
             <span className="mono">01</span> Network Map
           </button>
@@ -74,7 +101,10 @@ export default function App() {
         </div>
       </nav>
       {tab === 'atlas' && <Catalogue onTrySim={trySim} openRequest={patternRequest} onBuild={() => go('build')} onNetworking={() => go('net')} />}
-      {tab === 'sim' && <Simulator preset={preset} />}
+      {tab === 'project' && (project
+        ? <Project project={project} setProject={setProject} onOpenSim={trySim} />
+        : <div className="net-page"><p className={projectErr ? 'bad-text' : 'dim'}>{projectErr || 'Loading your project…'}</p></div>)}
+      {tab === 'sim' && <Simulator preset={preset} studio={studio} />}
       {tab === 'build' && <Build onTrySim={trySim} onOpenPattern={openPattern} openRequest={buildRequest} onCapacity={() => go('cap')} />}
       {tab === 'net' && <Networking onOpenPattern={openPattern} />}
       {tab === 'cap' && <Capacity onTrySim={trySim} onOpenBuild={openBuild} />}

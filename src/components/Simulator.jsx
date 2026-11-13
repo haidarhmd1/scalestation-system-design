@@ -7,6 +7,7 @@ import { PICKERS, STATION_INFO, TECH_DEFAULTS, shortTech } from '../sim/tech.js'
 import { Info, NeedLists, Term } from './Glossary.jsx';
 import Methodology from './Methodology.jsx';
 import { termsIn } from '../data/glossary.js';
+import { OwnProjectHint } from './OwnProject.jsx';
 
 const TICK_MS = 250;
 const SPEEDS = [{ value: 2, label: '1×' }, { value: 10, label: '5×' }, { value: 40, label: '20×' }];
@@ -30,9 +31,13 @@ const clock = (t) => {
 
 const freshSim = (cfg) => ({ t: 0, servers: cfg.autoscale ? Math.min(cfg.asMax, Math.max(cfg.asMin, cfg.servers)) : cfg.servers, booting: [], backlog: 0, lastScale: -999, spikeUntil: -1, history: [], log: [], prev: {} });
 
-export default function Simulator({ preset }) {
-  const [cfg, setCfg] = useState(() => ({ ...DEFAULT_CONFIG, ...(preset?.patch || {}) }));
-  const [sim, setSim] = useState(() => freshSim({ ...DEFAULT_CONFIG, ...(preset?.patch || {}) }));
+// A preset may carry partial technology picks (e.g. a scanned project): fill the rest with defaults.
+const withPreset = (patch = {}, tech = TECH_DEFAULTS) => ({ ...DEFAULT_CONFIG, ...patch, tech: { ...tech, ...(patch.tech || {}) } });
+
+export default function Simulator({ preset, studio }) {
+  const [cfg, setCfg] = useState(() => withPreset(preset?.patch));
+  const [sim, setSim] = useState(() => freshSim(withPreset(preset?.patch)));
+  const [saved, setSaved] = useState(null);
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(2);
   const [selected, setSelected] = useState('app');
@@ -82,7 +87,7 @@ export default function Simulator({ preset }) {
   // apply a preset coming from the catalogue
   useEffect(() => {
     if (!preset) return;
-    const next = { ...DEFAULT_CONFIG, ...preset.patch, tech: cfgRef.current.tech };
+    const next = withPreset(preset.patch, preset.patch.tech ? TECH_DEFAULTS : cfgRef.current.tech);
     setCfg(next);
     setSim(addLog(freshSim(next), 'info', `Loaded layout: ${preset.name}`));
     setBp(null);
@@ -210,6 +215,21 @@ export default function Simulator({ preset }) {
             <SideRail side="left" label="Controls" sub="traffic · build" onOpen={() => setLeftOpen(true)} />
           ) : (<>
           <button className="side-collapse" onClick={() => setLeftOpen(false)} aria-label="Collapse controls panel" title="Collapse panel">«</button>
+          {studio && (
+            <div className="studio-box">
+              <div className="panel-label mono">YOUR PROJECT</div>
+              <b>{studio.name}</b>
+              {cfg.calib ? (
+                <span className="studio-calib small">Calibrated from your test: <b className="mono">{fmt(cfg.calib.perCoreRps)} req/s</b> per core, <b className="mono">{ms(cfg.calib.appMs)}</b> per request</span>
+              ) : <span className="dim small">Using textbook numbers. Run a load test on the Your Project tab to calibrate.</span>}
+              <button className="btn small primary full" onClick={async () => {
+                setSaved('saving');
+                try { await studio.onSave(cfg); setSaved('ok'); } catch { setSaved('err'); }
+              }} title="Writes this layout to scalestation.config.yaml">{saved === 'saving' ? 'Saving…' : 'Save layout to config file'}</button>
+              {saved === 'ok' && <span className="small good-text">Saved. Commit the file to share it with your team.</span>}
+              {saved === 'err' && <span className="small bad-text">Could not save. Is the scalestation CLI still running?</span>}
+            </div>
+          )}
           <div className="panel-label mono">SCENARIO</div>
           <select className="select" value="" onChange={(e) => loadScenario(e.target.value)}>
             <option value="">Load a scenario…</option>
@@ -251,6 +271,7 @@ export default function Simulator({ preset }) {
             ))}
           </div>
           <Segmented info="region" label="Regions (multi-region active-active)" value={cfg.regions} onChange={(v) => update({ regions: v }, `Regions → ${v}`)} options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' }]} />
+          {!studio && <OwnProjectHint compact />}
           </>)}
         </aside>
 
@@ -529,7 +550,7 @@ function StationGuide({ id, cfg, update }) {
 
 function Inspector({ id, cfg, r, update, sim }) {
   const t = r.tiers;
-  const sc = serverCapacity(cfg.vcpu, cfg.ram, cfg.proxy);
+  const sc = serverCapacity(cfg.vcpu, cfg.ram, cfg.proxy, cfg.calib);
   const tone = (rho) => (rho >= 1 ? 'bad' : rho >= 0.85 ? 'warn' : '');
   const TERM = { users: 'rps', dns: 'dns', cdn: 'cdn', gateway: 'gateway', lb: 'lb', proxy: 'reverse-proxy', app: 'server', cache: 'cache', db: 'database', queue: 'queue', workers: 'worker' };
   const head = (title, sub) => (
@@ -587,8 +608,8 @@ function Inspector({ id, cfg, r, update, sim }) {
         <p className="note">IP hash pins each user to one server (sticky): sessions survive, but load spreads less evenly.</p>
       </div>);
     case 'proxy': {
-      const plain = serverCapacity(cfg.vcpu, cfg.ram, false);
-      const boosted = serverCapacity(cfg.vcpu, cfg.ram, true);
+      const plain = serverCapacity(cfg.vcpu, cfg.ram, false, cfg.calib);
+      const boosted = serverCapacity(cfg.vcpu, cfg.ram, true, cfg.calib);
       return (<div>{head('Reverse proxy', 'A proxy on your side that receives every request first, does the generic work, and hands real requests to the app.')}
         <Toggle label="Reverse proxy in front of the app" info="reverse-proxy" checked={cfg.proxy} onChange={(v) => update({ proxy: v }, `${v ? 'Built' : 'Removed'}: reverse proxy`)} hint="Runs on every app server, e.g. NGINX → localhost:3000" />
         <Stat k="Requests through proxy" info="rps" v={`${fmt(t.proxy.in)}/s`} />

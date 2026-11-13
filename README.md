@@ -138,6 +138,16 @@ From CPU and RAM to sharding, idempotency, stateless vs stateful servers, TCP, U
 
 Proxies also get "When you DO / DO NOT need one" lists.
 
+### On your own project: the ScaleStation CLI
+
+Already have a system? The **Show me how** cards in Build Your Own and in the Simulator sidebar explain the companion CLI ([`../ScaleStationCLI`](../ScaleStationCLI)). One npm script scans an existing repo (docker-compose, dependencies, routes) and opens this same app in **studio mode** with a **Your Project** tab:
+
+- the user's system drawn on the simulator map
+- a live k6 load test against their running app, with findings (CPU-bound, event loop blocked, memory growing, slowest endpoint)
+- **Calibrate**, which replaces the textbook numbers with measured ones
+
+Studio mode is the same code, built with `vite build --mode studio` (`src/studio.js`). The public site never calls the CLI's API. Set `CLI_PUBLISHED` in `src/components/OwnProject.jsx` to `true` once the CLI is on npm.
+
 ---
 
 ## Getting started
@@ -172,7 +182,7 @@ The simulator is a **capacity model**, not a benchmark. Every component has a ca
 - **Overload** turns into errors. There are also specific failure modes: database connection limits, lost in-memory sessions, cascading failures without circuit breakers, and growing queue backlogs.
 - **Cost** uses approximate public cloud on-demand prices (AWS us-east-1 style).
 
-All numbers are plausible orders of magnitude for learning. Real systems vary a lot, so always load-test your own (the Build Your Own track shows how). The in-app **How is this calculated?** panel lists every formula, price and assumption with its source.
+All numbers are plausible orders of magnitude for learning. Real systems vary a lot, so always load-test your own (the Build Your Own track shows how). The in-app **How is this calculated?** panel lists every formula, price and assumption with its source. In studio mode, a calibrated layout (`calib` in the config) replaces two of those assumptions with measured ones: requests per second per core, and the base time per request.
 
 ---
 
@@ -192,6 +202,9 @@ src/
 │   ├── Networking.jsx      # Networking tab: layers, encapsulation, sequence-diagram flows
 │   ├── Capacity.jsx        # Capacity tab: sizing loop, calculator, golden signals
 │   ├── Inside.jsx          # Simulator "look inside a station" pop-up
+│   ├── OwnProject.jsx      # "Simulate your own project" hint + how-to pop-up
+│   ├── Project.jsx         # Studio mode only: Your Project tab (scan, k6 test, calibrate)
+│   ├── CodeBlock.jsx       # Highlighted file / terminal snippets with a copy button
 │   ├── Glossary.jsx        # ⓘ icons and glossary pop-ups
 │   └── ui.jsx              # Sliders, toggles, popovers, sparklines
 ├── data/
@@ -207,6 +220,7 @@ src/
 ├── sim/
 │   ├── model.js            # Capacity model, prices, advisor, breaking-point search
 │   └── tech.js             # Technology choices and station explanations
+├── studio.js               # Studio mode flag + the CLI's local API
 └── styles.css              # Dark theme and layout
 ```
 
