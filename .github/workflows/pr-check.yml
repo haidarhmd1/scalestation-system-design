@@ -1,0 +1,147 @@
+name: PR check
+
+# Tests every pull request into main (Dependabot's included) and posts a
+# report comment with a merge / don't-merge verdict. The comment is updated
+# in place on each new push, so there's only ever one report per PR.
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: PR check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write # to post the report comment
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Dependabot metadata
+        id: meta
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Each check keeps going on failure so the report covers all of them;
+      # the last step fails the job if any of them failed.
+      - name: Install (npm ci)
+        id: install
+        continue-on-error: true
+        run: npm ci 2>&1 | tee install.log; exit ${PIPESTATUS[0]}
+
+      - name: Build
+        id: build
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+
+      - name: Smoke test (load the built site in Chrome)
+        id: smoke
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          npm install --no-save --ignore-scripts playwright-core@1.65.0 > /dev/null
+          npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          for i in $(seq 30); do curl -sf http://localhost:4173 > /dev/null && break; sleep 1; done
+          node .github/scripts/smoke-test.mjs http://localhost:4173 2>&1 | tee smoke.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Security audit
+        id: audit
+        if: steps.install.outcome == 'success'
+        run: npm audit --json > audit.json || true
+
+      - name: Post report
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        env:
+          INSTALL: ${{ steps.install.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          SMOKE: ${{ steps.smoke.outcome }}
+          DEPS: ${{ steps.meta.outputs.dependency-names }}
+          FROM: ${{ steps.meta.outputs.previous-version }}
+          TO: ${{ steps.meta.outputs.new-version }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          DEP_TYPE: ${{ steps.meta.outputs.dependency-type }}
+        with:
+          script: |
+            const fs = require('fs');
+            const e = process.env;
+            const read = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '');
+            const tail = (f, n = 25) => read(f).trim().split('\n').slice(-n).join('\n');
+            const icon = (o) => ({ success: '✅', failure: '❌', skipped: '⏭️' }[o] ?? '⏭️');
+
+            // npm audit summary
+            let audit = 'not run';
+            let highOrWorse = 0;
+            try {
+              const v = JSON.parse(read('audit.json')).metadata.vulnerabilities;
+              highOrWorse = v.high + v.critical;
+              audit = v.total === 0
+                ? '0 vulnerabilities'
+                : `${v.total} total (critical ${v.critical}, high ${v.high}, moderate ${v.moderate}, low ${v.low})`;
+            } catch {}
+
+            const failed = [e.INSTALL, e.BUILD, e.SMOKE].includes('failure');
+            const major = e.UPDATE_TYPE === 'version-update:semver-major';
+
+            let verdict;
+            if (failed) verdict = '### ❌ Don\'t merge: something broke (details below)';
+            else if (major) verdict = '### ⚠️ Safe to merge, but it\'s a major version: skim the release notes first';
+            else verdict = '### ✅ Safe to merge';
+
+            const lines = ['<!-- pr-check-report -->', verdict, ''];
+            if (e.DEPS) {
+              const kind = { 'version-update:semver-major': 'major', 'version-update:semver-minor': 'minor', 'version-update:semver-patch': 'patch' }[e.UPDATE_TYPE] ?? 'unknown';
+              lines.push(`**Update:** \`${e.DEPS}\` ${e.FROM} → ${e.TO} (${kind} update, ${e.DEP_TYPE === 'direct:development' ? 'dev / build tool only, not shipped to the site' : e.DEP_TYPE})`, '');
+            }
+            lines.push(
+              '| Check | Result |',
+              '|---|---|',
+              `| Install (\`npm ci\`) | ${icon(e.INSTALL)} |`,
+              `| Build (\`npm run build\`) | ${icon(e.BUILD)} |`,
+              `| Site loads in Chrome, no errors | ${icon(e.SMOKE)} |`,
+              `| Security audit | ${highOrWorse ? '⚠️' : 'ℹ️'} ${audit} |`,
+              '',
+            );
+
+            for (const [outcome, file, title] of [
+              [e.INSTALL, 'install.log', 'Install output'],
+              [e.BUILD, 'build.log', 'Build output'],
+              [e.SMOKE, 'smoke.log', 'Smoke test output'],
+            ]) {
+              if (outcome === 'failure') {
+                lines.push(`<details open><summary>${title} (last lines)</summary>`, '', '```', tail(file), '```', '</details>', '');
+              }
+            }
+
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            lines.push(`<sub>Commit ${context.payload.pull_request.head.sha.slice(0, 7)} · [full log](${run})</sub>`);
+            const body = lines.join('\n');
+
+            // Update our previous report if there is one, otherwise create it.
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const mine = comments.find((c) => c.user.type === 'Bot' && c.body.startsWith('<!-- pr-check-report -->'));
+            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+            await core.summary.addRaw(body).write();
+
+      - name: Fail if a check failed
+        if: steps.install.outcome == 'failure' || steps.build.outcome == 'failure' || steps.smoke.outcome == 'failure'
+        run: |
+          echo "::error::One or more checks failed. See the report comment on the PR."
+          exit 1
